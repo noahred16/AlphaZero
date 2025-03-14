@@ -15,14 +15,14 @@ class Connect4:
         self.move_history = []  # to track move history for undo
 
     def reset(self):
-        self.board = np.zeros((6, 7), dtype=int)
+        self.board = np.zeros((self.num_of_rows, self.num_of_cols), dtype=int)
         self.result = None
         self.move_count = 0
         self.current_player = 1
         self.move_history = []
 
     def get_legal_moves(self):
-        return [i for i in range(7) if self.board[0][i] == 0]
+        return [i for i in range(self.num_of_cols) if self.board[0][i] == 0]
 
     def make_move(self, column):
         # drop into first available row in the column
@@ -87,7 +87,7 @@ class Connect4:
     def count_in_direction(self, row, column, dr, dc, player):
         count = 0
         r, c = row + dr, column + dc
-        while 0 <= r < 6 and 0 <= c < 7 and self.board[r][c] == player:
+        while 0 <= r < self.num_of_rows and 0 <= c < self.num_of_cols and self.board[r][c] == player:
             # print("r: ", r, "c: ", c, "player: ", player, "board: ", self.board[r][c])
             count += 1
             r += dr
@@ -97,9 +97,9 @@ class Connect4:
     def print_pretty(self):
         # use X for player 1 and O for player -1 and empty for 0
         print("\n")
-        for row in range(6):
+        for row in range(self.num_of_rows):
             print("|", end="")
-            for col in range(7):
+            for col in range(self.num_of_cols):
                 if self.board[row][col] == 1:
                     print("X|", end="")
                 elif self.board[row][col] == -1:
@@ -108,7 +108,8 @@ class Connect4:
                     print(" |", end="")
             print("\n")
         print("---------------")
-        print(" 0 1 2 3 4 5 6")
+        for i in range(self.num_of_cols):
+            print(f" {i}", end="")
         print("\n")
         
     def print_url(self):

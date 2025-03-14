@@ -3,7 +3,12 @@ import random
 from connect4.connect4 import Connect4
 
 def main():
-    game = Connect4()
+    # default size
+    game = Connect4(num_of_rows=6, num_of_cols=7)
+
+    # smaller size for testing
+    # game = Connect4(num_of_rows=4, num_of_cols=4)
+
     print("Welcome to Connect 4!")
     game.print_pretty()
     
