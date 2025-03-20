@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Connect4:
     def __init__(self, board=None, current_player=1, num_of_rows=6, num_of_cols=7):
         self.num_of_rows = num_of_rows
@@ -56,16 +57,16 @@ class Connect4:
             # raise ValueError("No moves made")
         row, column = self.move_history[-1]
         player = self.board[row][column]
-        
+
         directions = [
             (0, 1),  # Horizontal right
             (1, 0),  # Vertical down
             (1, 1),  # Diagonal down-right
-            (1, -1)  # Diagonal down-left
+            (1, -1),  # Diagonal down-left
         ]
-        
-        worst_case_num_moves = self.num_of_rows * self.num_of_cols # (6*7=42)
-        
+
+        worst_case_num_moves = self.num_of_rows * self.num_of_cols  # (6*7=42)
+
         # check if the last move made a winning move
         # only need to check in 4 directions from the last move
         for dr, dc in directions:
@@ -74,7 +75,7 @@ class Connect4:
             count += self.count_in_direction(row, column, -dr, -dc, player)
             if count >= 4:
                 self.result = player
-                return player * (worst_case_num_moves-self.move_count)
+                return player * (worst_case_num_moves - self.move_count)  # this is key
         # if board is full or has no more moves
         # if self.board.all():
         if self.move_count == worst_case_num_moves:
@@ -87,7 +88,11 @@ class Connect4:
     def count_in_direction(self, row, column, dr, dc, player):
         count = 0
         r, c = row + dr, column + dc
-        while 0 <= r < self.num_of_rows and 0 <= c < self.num_of_cols and self.board[r][c] == player:
+        while (
+            0 <= r < self.num_of_rows
+            and 0 <= c < self.num_of_cols
+            and self.board[r][c] == player
+        ):
             # print("r: ", r, "c: ", c, "player: ", player, "board: ", self.board[r][c])
             count += 1
             r += dr
@@ -111,14 +116,14 @@ class Connect4:
         for i in range(self.num_of_cols):
             print(f" {i}", end="")
         print("\n")
-        
+
     def print_url(self):
         # https://connect4.gamesolver.org/?pos=44444456233333565556621211
         url = "https://connect4.gamesolver.org/?pos="
         # loop through history
         for row, column in self.move_history:
-            url += str(column+1)
+            url += str(column + 1)
         print(url)
-    
+
     def ugly_print(self):
         print(self.board)

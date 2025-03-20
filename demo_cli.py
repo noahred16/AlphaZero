@@ -1,6 +1,7 @@
 import numpy as np
 import random
-from connect4.connect4 import Connect4
+from games.connect4 import Connect4
+
 
 def main():
     # default size
@@ -11,7 +12,7 @@ def main():
 
     print("Welcome to Connect 4!")
     game.print_pretty()
-    
+
     while True:
         # User's move
         legal_moves = game.get_legal_moves()
@@ -23,10 +24,10 @@ def main():
                     print("Invalid move. Try again.")
             except ValueError:
                 print("Please enter a valid column number.")
-        
+
         game.make_move(user_move)
         game.print_pretty()
-        
+
         # Check for win/tie after user's move
         if game.evaluate_board() is not None:
             result = game.evaluate_board()
@@ -35,13 +36,13 @@ def main():
             elif result == 0:
                 print("It's a tie!")
             break
-        
+
         # Opponent's move (random)
         opponent_move = random.choice(game.get_legal_moves())
         print(f"Opponent chooses column {opponent_move}")
         game.make_move(opponent_move)
         game.print_pretty()
-        
+
         # Check for win/tie after opponent's move
         if game.evaluate_board() is not None:
             result = game.evaluate_board()
@@ -50,6 +51,7 @@ def main():
             elif result == 0:
                 print("It's a tie!")
             break
+
 
 if __name__ == "__main__":
     main()
