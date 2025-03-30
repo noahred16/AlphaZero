@@ -65,22 +65,96 @@ def test_mcts_move_probabilities():
         if move not in legal_moves:
             assert move_probs[move] == 0.0
 
-
 def test_mcts_samples_collection():
     """
-    test made to ensure the mcts code is actually recording the board states and the outcomes obtained from its simulations. 
-    this ensures we have well formed training data to feed into NN later.
+    Test that the MCTS implementation records board states and scaled outcomes.
+    This ensures that the training data (board state, reward) is well-formed.
     """
     game = Connect4(num_of_rows=4, num_of_cols=4)
     mcts = MCTS(iterations=50)
     mcts.search(game)
     samples = mcts.get_samples()
     
-    # basic check
+    # Ensure some samples were collected.
     assert len(samples) > 0
     
-    # check that each sample has the correct board shape and reward value
+    # Verify each sample has the proper board shape and a reward scaled between -1 and 1.
     for board_state, reward in samples:
         assert board_state.shape == (game.num_of_rows, game.num_of_cols)
-        # reward should be one of -1, 0, or 1
-        assert reward in [-1, 0, 1]
+        assert -1.0 <= reward <= 1.0
+
+def test_mcts_rollout_win_scaling():
+    """
+    Test that when a win is achieved quickly for the root player,
+    the rollout returns a positive reward scaled as (worst_case - move_count) / worst_case.
+    
+    For a 4x4 board, worst_case = 16.
+    We simulate a vertical win for player 1 (root player) with the moves:
+      p1: 0, p-1: 1, p1: 0, p-1: 1, p1: 0, p-1: 1, p1: 0
+    After these 7 moves, player 1 wins. The expected scaling factor is:
+      (16 - 7) / 16 = 9/16 ≈ 0.5625.
+    """
+    # Create a 4x4 Connect4 game
+    game = Connect4(num_of_rows=4, num_of_cols=4)
+    
+    # Simulate moves:
+    # p1 (1) moves in column 0
+    game.make_move(0)  # move_count = 1
+    # p-1 (-1) moves in column 1
+    game.make_move(1)  # move_count = 2
+    # p1 moves in column 0
+    game.make_move(0)  # move_count = 3
+    # p-1 moves in column 1
+    game.make_move(1)  # move_count = 4
+    # p1 moves in column 0
+    game.make_move(0)  # move_count = 5
+    # p-1 moves in column 1
+    game.make_move(1)  # move_count = 6
+    # p1 moves in column 0 --> completes vertical 4 in column 0
+    game.make_move(0)  # move_count = 7; win for player 1
+
+    mcts = MCTS(iterations=1)
+    # Since the game is already terminal, rollout should immediately return the scaled reward.
+    reward = mcts.rollout(game, root_player=1)
+    expected = (16 - 7) / 16  # Expected reward ≈ 0.5625
+    assert abs(reward - expected) < 1e-5, f"Expected {expected}, got {reward}"
+
+
+def test_mcts_rollout_loss_scaling():
+    """
+    Test that when a loss is achieved quickly for the root player,
+    the rollout returns a negative reward scaled as -(worst_case - move_count) / worst_case.
+    
+    For a 4x4 board, worst_case = 16.
+    We simulate a vertical win for the opponent (player -1) with the moves:
+      p1: 1, p-1: 0, p1: 1, p-1: 0, p1: 2, p-1: 0, p1: 2, p-1: 0
+    After these 8 moves, player -1 wins. The expected scaling factor is:
+      (16 - 8) / 16 = 8/16 = 0.5, and since the win is for the opponent, the reward is -0.5.
+    """
+    # Create a 4x4 Connect4 game
+    game = Connect4(num_of_rows=4, num_of_cols=4)
+    
+    # Simulate moves:
+    # p1 moves in column 1
+    game.make_move(1)  # move_count = 1
+    # p-1 moves in column 0
+    game.make_move(0)  # move_count = 2
+    # p1 moves in column 1
+    game.make_move(1)  # move_count = 3
+    # p-1 moves in column 0
+    game.make_move(0)  # move_count = 4
+    # p1 moves in column 2
+    game.make_move(2)  # move_count = 5
+    # p-1 moves in column 0
+    game.make_move(0)  # move_count = 6
+    # p1 moves in column 2
+    game.make_move(2)  # move_count = 7
+    # p-1 moves in column 0 --> completes vertical win for player -1 in column 0
+    game.make_move(0)  # move_count = 8; win for player -1
+
+    mcts = MCTS(iterations=1)
+    # Since the game is terminal with a loss for the root player (1),
+    # rollout should immediately return the negative scaled reward.
+    reward = mcts.rollout(game, root_player=1)
+    expected = -((16 - 8) / 16)  # Expected reward = -0.5
+    assert abs(reward - expected) < 1e-5, f"Expected {expected}, got {reward}"

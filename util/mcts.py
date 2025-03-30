@@ -56,19 +56,53 @@ class MCTS:
         self.exploration_constant = exploration_constant
         self.samples = []  # will store tuples of (board state, outcome)
 
-    def rollout(self, game: Connect4, root_player: int) -> int:
+    # def rollout(self, game: Connect4, root_player: int) -> int:
+    #     """
+    #     Play out the game randomly until reaching a terminal state.
+    #     Returns:
+    #         1  if the terminal state is a win for the root player,
+    #         -1 if it is a loss,
+    #         0  for a tie.
+    #     """
+    #     while True:
+    #         result = game.evaluate_board()
+    #         if result is not None:
+    #             # determine the winner: positive means player 1 wins,
+    #             # negative means player -1 wins, 0 indicates a tie.
+    #             if result > 0:
+    #                 winner = 1
+    #             elif result < 0:
+    #                 winner = -1
+    #             else:
+    #                 winner = 0
+
+    #             if winner == root_player:
+    #                 return 1
+    #             elif winner == 0:
+    #                 return 0
+    #             else:
+    #                 return -1
+
+    #         legal_moves = game.get_legal_moves()
+    #         if not legal_moves:
+    #             return 0  # tie if no moves available
+    #         move = random.choice(legal_moves)
+    #         game.make_move(move)
+    
+    def rollout(self, game: Connect4, root_player: int) -> float:
         """
         Play out the game randomly until reaching a terminal state.
-        Returns:
-            1  if the terminal state is a win for the root player,
-            -1 if it is a loss,
-            0  for a tie.
+        Returns a reward that factors in the number of moves taken:
+        - A quicker win yields a higher positive reward.
+        - A slower win yields a lower positive reward.
+        - For a loss, the reward is negative, with faster losses more severely penalized.
+        - Ties return 0.
         """
         while True:
             result = game.evaluate_board()
             if result is not None:
-                # determine the winner: positive means player 1 wins,
-                # negative means player -1 wins, 0 indicates a tie.
+                worst_case = game.num_of_rows * game.num_of_cols  # maximum possible moves
+                # Determine the winner based on the last move.
                 if result > 0:
                     winner = 1
                 elif result < 0:
@@ -76,16 +110,20 @@ class MCTS:
                 else:
                     winner = 0
 
+                # Calculate a scaling factor based on how quickly the game ended.
+                # For example, a win achieved in fewer moves yields a larger factor.
+                scaled = (worst_case - game.move_count) / worst_case
+
                 if winner == root_player:
-                    return 1
+                    return scaled
                 elif winner == 0:
-                    return 0
+                    return 0.0
                 else:
-                    return -1
+                    return -scaled
 
             legal_moves = game.get_legal_moves()
             if not legal_moves:
-                return 0  # tie if no moves available
+                return 0.0  # Tie if no moves are available.
             move = random.choice(legal_moves)
             game.make_move(move)
 
