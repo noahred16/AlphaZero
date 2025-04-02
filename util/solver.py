@@ -27,10 +27,20 @@ class Solver:
             if value > best_eval:
                 best_eval = value
                 best_move = move
+        if not moves_values:
+            raise ValueError("No legal moves available to evaluate.")
 
         # normalize the moves values and convert to value-weighted probabilities
         max_value = max(moves_values.values())
         min_value = min(moves_values.values())
+        if (
+            max_value == float("-inf")
+            or max_value == float("inf")
+            or min_value == float("inf")
+            or min_value == float("-inf")
+        ):
+            raise ValueError("Normalization error")
+
         if max_value != min_value:
             for move, value in moves_values.items():
                 moves_values[move] = (value - min_value) / (max_value - min_value)
@@ -57,12 +67,10 @@ class Solver:
         if depth == self.depth_limit:
             return 0  # we assume everything is a tie
         elif result is not None:
-            return result
+            return result * -1
 
         max_eval = float("-inf")
         for move in self.game.get_legal_moves():
-            # if depth == 0:
-            #     print(f"Move {move}, Alpha: {alpha}, Beta: {beta}")
             self.game.make_move(move)
             eval = self.min_value(depth + 1, alpha, beta)
             self.game.undo_move()
@@ -89,8 +97,6 @@ class Solver:
         for move in self.game.get_legal_moves():
             self.game.make_move(move)
             eval = self.max_value(depth + 1, alpha, beta)
-            # if depth == 1:
-            #     print(f"Sub-move: {move} with eval {eval}")
             self.game.undo_move()
             min_eval = min(min_eval, eval)
             beta = min(beta, eval)

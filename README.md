@@ -18,8 +18,7 @@ Rollouts are replaced by fetching predictions from the NN, and UCB1 is replaced 
 
 ## Resources
 [Deep Residual Learning for Image Recognition (ResNet)](https://arxiv.org/abs/1512.03385)
-
-
+[Lessons from AlphaZero: Connect Four](https://medium.com/oracledevs/lessons-from-alphazero-connect-four-e4a0ae82af68)
 
 
 

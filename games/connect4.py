@@ -2,24 +2,48 @@ import numpy as np
 
 
 class Connect4:
-    def __init__(self, board=None, current_player=1, num_of_rows=6, num_of_cols=7):
+    def __init__(self, board=None, num_of_rows=6, num_of_cols=7):
         self.num_of_rows = num_of_rows
         self.num_of_cols = num_of_cols
-
-        if board is not None:
-            self.board = board
-        else:
-            self.board = np.zeros((self.num_of_rows, self.num_of_cols), dtype=int)
+        self.board = np.zeros((self.num_of_rows, self.num_of_cols), dtype=int)
         self.result = None
         self.move_count = 0
-        self.current_player = current_player
-        self.move_history = []  # to track move history for undo
+        self.move_history = []
+
+        if board is not None:
+            self.board = np.array(board, dtype=int)
+            player_1_moves = []
+            player_2_moves = []
+            for col in range(self.num_of_cols):
+                for row in reversed(range(self.num_of_rows)):
+                    if self.board[row][col] == 1:
+                        player_1_moves.append((row, col))
+                    elif self.board[row][col] == -1:
+                        player_2_moves.append((row, col))
+
+            n_p1 = len(player_1_moves)
+            n_p2 = len(player_2_moves)
+            if not (n_p1 == n_p2 or abs(n_p1 - n_p2) == 1):
+                raise ValueError(
+                    f"Invalid state: p1 moves ({n_p1}) and p2 moves ({n_p2}) are not balanced."
+                )
+            for i in range(max(n_p1, n_p2)):
+                if i < n_p1:
+                    self.move_history.append(player_1_moves[i])
+                if i < n_p2:
+                    self.move_history.append(player_2_moves[i])
+
+            # if player 1 has the last move, flip
+            if n_p1 > n_p2:
+                self.flip_board()
+
+            self.move_count = n_p1 + n_p2
+            self.evaluate_board()
 
     def reset(self):
         self.board = np.zeros((self.num_of_rows, self.num_of_cols), dtype=int)
         self.result = None
         self.move_count = 0
-        self.current_player = 1
         self.move_history = []
 
     def get_legal_moves(self):
@@ -29,10 +53,10 @@ class Connect4:
         # drop into first available row in the column
         for row in reversed(range(self.num_of_rows)):
             if self.board[row][column] == 0:
-                self.board[row][column] = self.current_player
+                self.board[row][column] = 1
                 self.move_count += 1
                 self.move_history.append((row, column))  # save move to history
-                self.current_player = -self.current_player
+                self.flip_board()
                 return
         raise ValueError("Invalid move")
 
@@ -42,21 +66,26 @@ class Connect4:
             last_row, last_column = self.move_history.pop()
             self.board[last_row][last_column] = 0
             self.move_count -= 1
-            self.current_player = -self.current_player
+            self.flip_board()
             self.result = None
         else:
             raise ValueError("No moves to undo")
 
+    def flip_board(self):
+        """
+        Flip the board for the next player.
+        This is done to visualize the board the same regardless of whose turn it is.
+        """
+        self.board = -self.board
+
     # result is not set unless we evaluate. thats fine.
-    def evaluate_board(self):
+    def evaluate_board(self, player=1):
         """
         Evaluate the board for the current player, using last move made and last player
         """
-        if self.move_count == 0:
+        if self.move_count == 0 or self.move_count < 7:
             return None
-            # raise ValueError("No moves made")
         row, column = self.move_history[-1]
-        player = self.board[row][column]
 
         directions = [
             (0, 1),  # Horizontal right
@@ -70,16 +99,16 @@ class Connect4:
         # check if the last move made a winning move
         # only need to check in 4 directions from the last move
         for dr, dc in directions:
-            count = 1
-            count += self.count_in_direction(row, column, dr, dc, player)
-            count += self.count_in_direction(row, column, -dr, -dc, player)
+            count = 1  # only need to check win for prev player (always -1)
+            count += self.count_in_direction(row, column, dr, dc, -1)
+            # print(f"Checking direction ({dr}, {dc}): count = {count}")
+            count += self.count_in_direction(row, column, -dr, -dc, -1)
+            # print(f"Checking direction ({-dr}, {-dc}): count = {count}")
             if count >= 4:
-                self.result = player
-                return player * (worst_case_num_moves - self.move_count)  # this is key
+                self.result = worst_case_num_moves - self.move_count
+                return self.result  # this is key
         # if board is full or has no more moves
-        # if self.board.all():
         if self.move_count == worst_case_num_moves:
-            # print("TIE")
             self.result = 0
             return 0
         return None
@@ -111,7 +140,7 @@ class Connect4:
                     print("O|", end="")
                 else:
                     print(" |", end="")
-            print("\n")
+            print("")
         print("---------------")
         for i in range(self.num_of_cols):
             print(f" {i}", end="")

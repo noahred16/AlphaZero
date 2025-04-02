@@ -11,10 +11,9 @@ def clone_game(game: Connect4) -> Connect4:
     """
     new_board = np.copy(game.board)
     new_game = Connect4(
-        board=new_board, 
-        current_player=game.current_player, 
-        num_of_rows=game.num_of_rows, 
-        num_of_cols=game.num_of_cols
+        board=new_board,
+        num_of_rows=game.num_of_rows,
+        num_of_cols=game.num_of_cols,
     )
     new_game.move_count = game.move_count
     new_game.move_history = game.move_history.copy()
