@@ -1,11 +1,12 @@
-import numpy as np
-from games.connect4 import Connect4
-from util.solver import Solver
+import os
 import random
+import numpy as np
 from tqdm import tqdm
+from util.solver import Solver
+from games.connect4 import Connect4
 
 # generating labelled training data, we feed random board positions to a Connect Four solver
-# generate our labelled sets using positions from highly imperfect games (epsilon=0.5)
+# generate our labelled sets using positions from highly imperfect games (epsilon-greedy policy)
 
 game = Connect4(num_of_rows=4, num_of_cols=4)
 solver = Solver(game)
@@ -34,13 +35,13 @@ def decode_board(hash_key):
 
 
 num_samples = 10_000
-num_samples = 100
+# num_samples = 100
 
 policy, value = solver.evaluate_state()
 with tqdm(total=num_samples, desc="Generating samples") as pbar:
     while len(training_data) < num_samples:
-        # genration policy: 50% chance to move random
-        if random.random() < 0.5:
+        # genration policy: 80% chance to move random
+        if random.random() < 0.80:
             legal_moves = game.get_legal_moves()
             action = random.choice(legal_moves)
         else:
@@ -84,8 +85,15 @@ for i in range(10):
     print(value)
 
 
+file_name = "data/connect4_4x4_training_data.npy"
+
+# are you sure.
+file_exists = os.path.isfile(file_name)
+if file_exists:
+    print(f"File {file_name} already exists. It will be overwritten.")
+input("Press Enter to save the training data to a .npy file...")
+
 # Save the training data to a .npy file
-# file_name = "data/connect4_4x4_training_data.npy"
-# training_data_array = np.array(training_data, dtype=object)
-# np.save(file_name, training_data_array)
-# print(f"Training data saved to {file_name}")
+training_data_array = np.array(training_data, dtype=object)
+np.save(file_name, training_data_array)
+print(f"Training data saved to {file_name}")
