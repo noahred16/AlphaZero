@@ -132,7 +132,7 @@ class MCTS:
         Returns a probability vector over moves for every column,
         computed from the visit counts at the root.
         """
-        root_player = game.current_player
+        root_player = 1
         root_node = MCTSNode(clone_game(game))
 
         for _ in range(self.iterations):
