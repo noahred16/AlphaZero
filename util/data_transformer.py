@@ -13,8 +13,20 @@ def convert_board_to_tensor(board):
     return torch.tensor(board_tensor, device=device)
 
 
+def convert_tensor_to_board(tensor):
+    # tensor.shape: torch.Size([1, 2, 4, 4])
+    tensor = tensor.cpu().numpy()
+
+    board = np.zeros((tensor.shape[2], tensor.shape[3]), dtype=np.int8)
+
+    board[tensor[0, 0] > 0] = 1  # Player 1 - first channel
+    board[tensor[0, 1] > 0] = -1  # Player -1 - second channel
+
+    return board
+
+
 class DataTransformer:
-    def __init__(self, data_path):
+    def __init__(self, data_path, batch_size=64):
         training_data = np.load(data_path, allow_pickle=True)
 
         boards = []
@@ -44,11 +56,29 @@ class DataTransformer:
         train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
         # Dataloaders
-        self.train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-        self.test_loader = DataLoader(test_dataset, batch_size=64)
+        self.train_loader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True
+        )
+        self.test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
     def get_training_data(self):
         return self.train_loader
 
     def get_testing_data(self):
         return self.test_loader
+
+    def get_evaluation_data(self, type="test"):
+        """
+        This class by default converts the data into tensors for training.
+        For mcts evaluation we need it formated as numpy arrays to pass to the connect4 game.
+        """
+        loader = self.test_loader if type == "test" else self.train_loader
+
+        eval_boards = []
+        eval_target_policy = []
+        eval_target_value = []
+        for board, target_policy, target_value in loader:
+            eval_boards.append(convert_tensor_to_board(board))
+            eval_target_policy.append(target_policy.cpu().numpy()[0])
+            eval_target_value.append(target_value.cpu().numpy()[0])
+        return eval_boards, eval_target_policy, eval_target_value
