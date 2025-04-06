@@ -6,6 +6,15 @@ import torch
 import torch.nn as nn
 from games.connect4 import Connect4
 from util.solver import Solver
+from util.data_transformer import DataTransformer
+from networks.Connect4Net import Connect4Net
+from tqdm import tqdm
+
+# Set seed for reproducibility
+torch.manual_seed(42)
+np.random.seed(42)
+random.seed(42)
+
 
 def clone_game(game: Connect4) -> Connect4:
     """
@@ -182,39 +191,8 @@ class SupervisedMCTS:
         return self.samples
 
 
-#NN architecture.
-class Connect4Net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(2, 128, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.ReLU(),
-        )
-        self.flatten = nn.Flatten()
-        self.fc = nn.Sequential(
-            nn.Linear(128 * 4 * 4, 256),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-        )
-        self.policy_head = nn.Linear(128, 4)
-        self.value_head = nn.Sequential(nn.Linear(128, 1), nn.Tanh())
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.flatten(x)
-        x = self.fc(x)
-        policy = self.policy_head(x)
-        value = self.value_head(x)
-        return policy, value
-
-
 ############################### Evaluation Routine ################################
+
 
 def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
     """
@@ -230,7 +208,7 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
     mcts = SupervisedMCTS(model_path=model_path, iterations=mcts_iterations, device=device)
     solver_accuracy = Solver(Connect4(num_of_rows=4, num_of_cols=4))
 
-    for _ in range(num_samples):
+    for _ in tqdm(range(num_samples), desc="Evaluating random positions", unit="game"):
         game = Connect4(num_of_rows=4, num_of_cols=4)
         # this a random number of moves (between 0 and 5) ensuring game is not terminal
         num_moves = random.randint(0, 5)
@@ -246,21 +224,30 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
         if game.evaluate_board() is not None:
             continue
 
-        #use the Solver to get the ground truth best move.
+        # use the Solver to get the ground truth best move.
         policy_solver, _ = solver_accuracy.evaluate_state()
-        best_move_solver = int(np.argmax(policy_solver))
+        # best_move_solver = int(np.argmax(policy_solver))
 
-        #use SupervisedMCTS to get the best move.
+        # there may be multiple best moves, we find all best moves
+        best_moves_solver = []
+        best_value = np.max(policy_solver)
+        for move in range(len(policy_solver)):
+            # check if move is a best move
+            if best_value == policy_solver[move]:
+                best_moves_solver.append(move)
+
+        # use SupervisedMCTS to get the best move.
         move_probs = mcts.search(clone_game(game))
         best_move_mcts = int(np.argmax(move_probs))
 
-        #compare moves.
-        if best_move_solver == best_move_mcts:
+        # compare moves.
+        if best_move_mcts in best_moves_solver:
             correct += 1
         total += 1
 
     accuracy = (correct / total) * 100 if total > 0 else 0.0
     print(f"SupervisedMCTS Accuracy: {accuracy:.2f}% over {total} evaluated positions.")
+
 
 def evaluate_model_soft_accuracy(num_samples=100, threshold=0.01, mcts_iterations=500):
     """
@@ -314,44 +301,63 @@ def evaluate_model_soft_accuracy(num_samples=100, threshold=0.01, mcts_iteration
     else:
         print("No nonterminal samples available for evaluation.")
 
-def evaluate_supervised_mcts_on_test_data(num_samples=None, mcts_iterations=500, threshold=0.01):
+
+def evaluate_supervised_mcts_on_test_data(
+    num_samples=None, mcts_iterations=800
+):
     """
     Evaluate SupervisedMCTS on the held-out 20% test data from the generated training set.
     For each board in the test set:
       - Use SupervisedMCTS.predict to get the predicted policy.
       - Compare the predicted best move to the target best move from the training data.
-    A prediction is considered correct if the predicted move's target probability is within 
+    A prediction is considered correct if the predicted move's target probability is within
     `threshold` of the maximum target probability.
     """
     # Load the full dataset that was generated earlier.
-    training_data = np.load("data/connect4_4x4_training_data.npy", allow_pickle=True)
-    total_samples = len(training_data)
-    split_index = int(0.8 * total_samples)
-    test_data = training_data[split_index:].tolist()
+    data_path = "data/connect4_4x4_training_data.npy"
+    transformer = DataTransformer(data_path, batch_size=1)
 
-    
+    # 2,000 test data samples (20% test from original 10,000 samples)
+    # to guarantee we are evaluating on data we haven't trained on.
+    eval_boards, eval_target_policy, eval_target_value = (
+        transformer.get_evaluation_data(type="test")
+    )
+
     # if num_samples is provided, sample that many test examples.
-    if num_samples is not None and num_samples < len(test_data):
-        test_data = random.sample(test_data, num_samples)
+    if num_samples is None:
+        num_samples = len(eval_boards)
+    else:
+        num_samples = min(num_samples, len(eval_boards))
 
-    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_path = "models/connect4_4x4_supervised.pt"
-    mcts = SupervisedMCTS(model_path=model_path, iterations=mcts_iterations, device=device)
-    
+    mcts = SupervisedMCTS(
+        model_path=model_path, iterations=mcts_iterations, device=device
+    )
+
     correct = 0
     total = 0
 
-    for sample in test_data:
-        # each sample is a tuple: (board, target_policy, target_value)
-        board, target_policy, target_value = sample
+    for i in tqdm(range(num_samples), desc="Evaluating MCTS", unit="board"):
+        board = eval_boards[i]
+        target_policy = eval_target_policy[i]
+        target_value = eval_target_value[i]
+
         game = Connect4(num_of_rows=4, num_of_cols=4, board=board)
-        pred_policy, _ = mcts.predict(game)
-        pred_move = int(np.argmax(pred_policy))
-        max_target = np.max(target_policy)
-        # consider the prediction correct if the target probability for pred_move is
-        # within the threshold of the maximum target probability.
-        if target_policy[pred_move] >= (max_target - threshold):
+        # pred_policy, _ = mcts.predict(game)
+        pred_policy = mcts.search(clone_game(game))
+        max_pred = np.max(pred_policy)
+        pred_move = np.argmax(pred_policy)
+        # print("predicted move:", pred_move, "with value:", max_pred)
+
+        policy_moves = []
+        best_policy_value = np.max(target_policy)
+        for j in range(len(target_policy)):
+            if best_policy_value == target_policy[j]:
+                policy_moves.append(j)
+
+        # Consider the prediction correct if the predicted move is any of the best moves
+        if pred_move in policy_moves:
             correct += 1
         total += 1
 
@@ -359,8 +365,12 @@ def evaluate_supervised_mcts_on_test_data(num_samples=None, mcts_iterations=500,
     print(f"SupervisedMCTS Test Data Accuracy: {accuracy:.2f}% over {total} samples.")
 
 
+# evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=800)
 
-# evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500)
+# TODO: evaluate using "search", rather than "predict" to get the best move from MCTS.
 # evaluate_model_soft_accuracy(num_samples=100, threshold=0.01, mcts_iterations=500)
-evaluate_supervised_mcts_on_test_data(num_samples=100, mcts_iterations=500, threshold=0.01)
 
+
+evaluate_supervised_mcts_on_test_data(
+    num_samples=300, mcts_iterations=800
+)
