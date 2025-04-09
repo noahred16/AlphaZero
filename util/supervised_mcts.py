@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from games.connect4 import Connect4
 from util.solver import Solver
-from util.data_transformer import DataTransformer
+from util.data_transformer import DataTransformer, convert_board_to_tensor
 from networks.Connect4Net import Connect4Net
 from tqdm import tqdm
 
@@ -70,23 +70,13 @@ class SupervisedMCTS:
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval()
 
-    def convert_board_to_tensor(self, board):
-        """
-        convert the board (numpy array with values -1, 0, 1) to a tensor of shape [2, rows, cols]:
-        channel 0 for player 1's pieces, channel 1 for player -1's pieces.
-        """
-        board_tensor = np.zeros((2, board.shape[0], board.shape[1]), dtype=np.float32)
-        board_tensor[0] = (board == 1).astype(np.float32)
-        board_tensor[1] = (board == -1).astype(np.float32)
-        return torch.tensor(board_tensor, device=self.device)
-
     def evaluate_with_model(self, game: Connect4) -> float:
         """
         evaluate the current game state using the trained model.
         returns the value prediction (expected outcome) as a float in [-1, 1].
         """
         board = game.board
-        board_tensor = self.convert_board_to_tensor(board).unsqueeze(0)  # add batch dimension
+        board_tensor = convert_board_to_tensor(board).unsqueeze(0)  # add batch dimension
         with torch.no_grad():
             _, value = self.model(board_tensor)
         return value.item()
@@ -177,7 +167,7 @@ class SupervisedMCTS:
             - policy: A probability distribution over moves (numpy array).
             - value: A scalar value prediction in [-1, 1].
         """
-        board_tensor = self.convert_board_to_tensor(game.board).unsqueeze(0)  # add batch dimension
+        board_tensor = convert_board_to_tensor(game.board).unsqueeze(0)  # add batch dimension
         with torch.no_grad():
             policy_logits, value = self.model(board_tensor)
         # Convert logits to probabilities
