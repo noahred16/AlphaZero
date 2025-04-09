@@ -14,3 +14,14 @@ game = Connect4(num_of_rows=4, num_of_cols=4)
 move_probs = mcts.search(game)
 print("Move probabilities:", move_probs)
 samples = mcts.get_samples()
+
+
+# evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=800)
+
+# TODO: evaluate using "search", rather than "predict" to get the best move from MCTS.
+# evaluate_model_soft_accuracy(num_samples=100, threshold=0.01, mcts_iterations=500)
+
+
+# evaluate_supervised_mcts_on_test_data(
+#     num_samples=300, mcts_iterations=800
+# )

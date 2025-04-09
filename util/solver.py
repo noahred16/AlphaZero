@@ -11,7 +11,7 @@ class Solver:
         policy = np.zeros(self.game.num_of_cols)
         # fastest win is 7 moves
         best_score = self.game.num_of_cols * self.game.num_of_rows - 7
-        worst_score = (self.game.num_of_cols * self.game.num_of_rows - 7) * -1
+        worst_score = best_score * -1
         value = worst_score  # worst case is the fastest loss
 
         # separate handling for valid moves. invalid moves always have a 0 probability

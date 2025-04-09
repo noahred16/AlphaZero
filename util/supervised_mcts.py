@@ -38,25 +38,75 @@ class MCTSNode:
         self.parent = parent
         self.move = move  # the move that led to this node (None for the root)
         self.children = {}  # dictionary: move (int) -> child node
-        self.visits = 0
-        self.wins = 0.0  # cumulative reward (from the root's perspective)
+        self.num_visits = 0
+        self.total_score = 0 # cumulative reward (from the root's perspective)
         self.untried_moves = game.get_legal_moves()  # moves that have not yet been expanded
+        if self.parent is not None:
+            self.turn = -self.parent.turn
+        else:
+            self.turn = 1
 
     def is_fully_expanded(self):
         return len(self.untried_moves) == 0
 
-    def best_child(self, exploration_constant=1.41):
+    def best_child(self, exploration_constant=1.41, debug=False):
         """
         self explanatory, select the child with the highest UCT value.
         """
         best_score = -float("inf")
         best_child = None
         for move, child in self.children.items():
-            score = (child.wins / child.visits) + exploration_constant * math.sqrt(math.log(self.visits) / child.visits)
+            if child.num_visits == 0:
+                return child # TODO: choose random child instead of first
+            score = (child.total_score / child.num_visits) + exploration_constant * math.sqrt(math.log(self.
+            num_visits) / child.num_visits)
+            if debug:
+                print(f"Move: {move}, Score: {score}, Visits: {child.num_visits}, Total Score: {child.total_score}")
             if score > best_score:
                 best_score = score
                 best_child = child
         return best_child
+    
+    def PUCT(self, exploration_constant=1.41, policy_priors=None, debug=False):
+        """
+        Select the child with the highest PUCT value.
+        
+        PUCT formula: Q(s,a) + c_puct * P(s,a) * sqrt(sum_b N(s,b)) / (1 + N(s,a))
+        """
+        best_score = -float("inf")
+        best_child = None
+        
+        # Calculate total visits for the square root term
+        total_visits = sum(child.num_visits for child in self.children.values())
+        sqrt_total_visits = math.sqrt(total_visits) if total_visits > 0 else 1.0
+        
+        for move, child in self.children.items():
+            # If child has no visits, prioritize it
+            if child.num_visits == 0:
+                return child
+            
+            # Exploitation term (Q-value)
+            q_value = child.total_score / child.num_visits
+            
+            # Prior probability for this move
+            prior = policy_priors[move] if policy_priors is not None else 1.0 / len(self.children)
+            
+            # PUCT exploration bonus
+            u_value = exploration_constant * prior * sqrt_total_visits / (1 + child.num_visits)
+            
+            # Combined PUCT score
+            puct_score = -(q_value + u_value)
+            
+            if debug:
+                print(f"Move: {move}, PUCT: {puct_score:.4f}, Q: {q_value:.4f}, U: {u_value:.4f}, "
+                  f"Visits: {child.num_visits}, Prior: {prior:.4f}")
+        
+        if puct_score > best_score:
+            best_score = puct_score
+            best_child = child
+    
+        return best_child
+
 
 
 class SupervisedMCTS:
@@ -70,6 +120,8 @@ class SupervisedMCTS:
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval()
 
+        self.root = None
+
     def evaluate_with_model(self, game: Connect4) -> float:
         """
         evaluate the current game state using the trained model.
@@ -80,8 +132,20 @@ class SupervisedMCTS:
         with torch.no_grad():
             _, value = self.model(board_tensor)
         return value.item()
+    
+    def evaluate_policy_with_model(self, game: Connect4) -> np.ndarray:
+        """
+        evaluate the current game state using the trained model.
+        returns the policy prediction as a probability distribution over moves.
+        """
+        board = game.board
+        board_tensor = convert_board_to_tensor(board).unsqueeze(0)
+        with torch.no_grad():
+            policy_logits, _ = self.model(board_tensor)
+        policy = torch.softmax(policy_logits, dim=1).cpu().numpy().flatten()
+        return policy
 
-    def rollout(self, game: Connect4, root_player: int) -> float:
+    def rollout(self, game: Connect4, root_player: int = 1) -> float:
         """
         using the trained model to evaluate the leaf node.
         if the game is terminal, compute a scaled reward based on move count (as before).
@@ -89,25 +153,33 @@ class SupervisedMCTS:
         """
         result = game.evaluate_board()
         if result is not None:
-            worst_case = game.num_of_rows * game.num_of_cols
-            if result > 0:
-                winner = 1
-            elif result < 0:
-                winner = -1
-            else:
-                winner = 0
+            best_score = game.num_of_rows * game.num_of_cols - 7
+            worst_case = best_score * -1
+            # print("best_score", best_score, "worst_case", worst_case)
+            value = (result - worst_case) / (best_score - worst_case)
+            value = 2 * value - 1  # scale to [-1, 1]
+            return value
 
-            scaled = (worst_case - game.move_count) / worst_case
-            if winner == root_player:
-                return scaled
-            elif winner == 0:
-                return 0.0
-            else:
-                return -scaled
+
+
+            # worst_case = game.num_of_rows * game.num_of_cols
+            # if result > 0:
+            #     winner = 1
+            # elif result < 0:
+            #     winner = -1
+            # else:
+            #     winner = 0
+
+            # scaled = (worst_case - game.move_count) / worst_case
+            # if winner == root_player:
+            #     return scaled
+            # elif winner == 0:
+            #     return 0.0
+            # else:
+            #     return -scaled
 
         # if non-terminal state then use the model's prediction.
-        value = self.evaluate_with_model(game)
-        return value
+        return self.evaluate_with_model(game)
 
     def search(self, game: Connect4) -> np.ndarray:
         """
@@ -116,48 +188,69 @@ class SupervisedMCTS:
         """
         root_player = 1
         root_node = MCTSNode(clone_game(game))
+        self.root = root_node
 
         for _ in range(self.iterations):
             node = root_node
+                    
             simulation_game = clone_game(game)
 
-            #selection process
-            while node.is_fully_expanded() and node.children:
-                node = node.best_child(self.exploration_constant)
+            # selection process
+            # while node.is_fully_expanded() and node.children:
+            while len(node.children) > 0 and node.game.result is None:
+                # node = node.best_child(self.exploration_constant)
+                policy_priors = self.evaluate_policy_with_model(simulation_game)
+                # PUCT
+                node = node.PUCT(
+                    exploration_constant=self.exploration_constant,
+                    policy_priors=policy_priors,
+                )
                 simulation_game.make_move(node.move)
 
-            #expansion process
-            if node.untried_moves:
+            # expansion process
+            # if num_visits is zero, we expand this node
+            if node.num_visits == 0:
+                for move in node.untried_moves:
+                    simulation_game.make_move(move)
+                    child_node = MCTSNode(clone_game(simulation_game), parent=node, move=move)
+                    node.children[move] = child_node
+                    simulation_game.undo_move()
+                # current is a random untried move
                 move = random.choice(node.untried_moves)
                 simulation_game.make_move(move)
                 node.untried_moves.remove(move)
-                child_node = MCTSNode(clone_game(simulation_game), parent=node, move=move)
-                node.children[move] = child_node
-                node = child_node
+                node = node.children[move]
 
-            #save the board state from where the evaluation will start.
-            sample_state = np.copy(simulation_game.board)
+            # #save the board state from where the evaluation will start.
+            # sample_state = np.copy(simulation_game.board)
 
             #evaluation using the Model instead of rollout as we discussed.
             reward = self.rollout(clone_game(simulation_game), root_player)
 
-            #save the sample
-            self.samples.append((sample_state, reward))
+            # #save the sample
+            # self.samples.append((sample_state, reward))
 
-            #backpropogation
-            current_reward = reward
+            # backpropogation
+            # print("backpropogation reward:", reward * node.turn)
+            back_propped_move = node.move
             while node is not None:
-                node.visits += 1
-                node.wins += current_reward
-                current_reward = -current_reward  # flip reward for the opponent
+                current_reward = reward * node.turn
+                node.num_visits += 1
+                node.total_score += current_reward
+                # node.game.print_pretty()
+                # print("back_propped_move", back_propped_move, "is parent: ", node.parent is None)
+                # print("reward", current_reward)
+
+                # current_reward = -current_reward  # TODO: review flip reward for the opponent
+
                 node = node.parent
 
         #compute move probabilities for the root node using normalized visit counts.
-        move_visits = {move: child.visits for move, child in root_node.children.items()}
+        move_visits = {move: child.num_visits for move, child in root_node.children.items()}
         total_visits = sum(move_visits.values())
         move_probs = np.zeros(game.num_of_cols)
-        for move, visits in move_visits.items():
-            move_probs[move] = visits / total_visits
+        for move, num_visits in move_visits.items():
+            move_probs[move] = num_visits / total_visits
         return move_probs
 
     def predict(self, game: Connect4):
@@ -361,6 +454,6 @@ def evaluate_supervised_mcts_on_test_data(
 # evaluate_model_soft_accuracy(num_samples=100, threshold=0.01, mcts_iterations=500)
 
 
-evaluate_supervised_mcts_on_test_data(
-    num_samples=300, mcts_iterations=800
-)
+# evaluate_supervised_mcts_on_test_data(
+#     num_samples=50, mcts_iterations=800
+# )
