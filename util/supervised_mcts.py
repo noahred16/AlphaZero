@@ -38,37 +38,117 @@ class MCTSNode:
         self.parent = parent
         self.move = move  # the move that led to this node (None for the root)
         self.children = {}  # dictionary: move (int) -> child node
-        self.visits = 0
-        self.wins = 0.0  # cumulative reward (from the root's perspective)
-        self.untried_moves = game.get_legal_moves()  # moves that have not yet been expanded
+        self.num_visits = 0
+        self.total_score = 0  # cumulative reward (from the root's perspective)
+        self.untried_moves = (
+            game.get_legal_moves()
+        )  # moves that have not yet been expanded
+        if self.parent is not None:
+            self.turn = -self.parent.turn
+        else:
+            self.turn = 1
 
     def is_fully_expanded(self):
         return len(self.untried_moves) == 0
 
-    def best_child(self, exploration_constant=1.41):
+    def is_terminal(self):
+        return self.game.evaluate_board() is not None
+
+    def get_ucb(self, exploration_constant):
+        if self.num_visits == 0:
+            return float("inf")
+
+        exploitation = (self.total_score / self.num_visits) * self.turn
+
+        exploration = exploration_constant * math.sqrt(
+            math.log(self.parent.num_visits) / self.num_visits
+        )
+
+        return exploitation + exploration
+
+    def best_child(self, exploration_param=0):
+        best_node = None
+        best_value = float("-inf")
+
+        for move, child in self.children.items():
+            value = child.get_ucb(exploration_param)
+            if value > best_value:
+                best_value = value
+                best_node = child
+
+        return best_node
+
+    # TODO make use of
+    def PUCT(self, exploration_constant, policy_priors=None, debug=False):
         """
-        self explanatory, select the child with the highest UCT value.
+        Select the child with the highest PUCT value.
+
+        PUCT formula: Q(s,a) + c_puct * P(s,a) * sqrt(sum_b N(s,b)) / (1 + N(s,a))
         """
         best_score = -float("inf")
         best_child = None
+
+        # Calculate total visits for the square root term
+        total_visits = sum(child.num_visits for child in self.children.values())
+        sqrt_total_visits = math.sqrt(total_visits) if total_visits > 0 else 1.0
+
         for move, child in self.children.items():
-            score = (child.wins / child.visits) + exploration_constant * math.sqrt(math.log(self.visits) / child.visits)
-            if score > best_score:
-                best_score = score
-                best_child = child
+            # If child has no visits, prioritize it
+            if child.num_visits == 0:
+                return child
+
+            # Exploitation term (Q-value)
+            q_value = child.total_score / child.num_visits
+
+            # Prior probability for this move
+            prior = (
+                policy_priors[move]
+                if policy_priors is not None
+                else 1.0 / len(self.children)
+            )
+
+            # PUCT exploration bonus
+            u_value = (
+                exploration_constant
+                * prior
+                * sqrt_total_visits
+                / (1 + child.num_visits)
+            )
+
+            # Combined PUCT score
+            puct_score = -(q_value + u_value)
+
+            if debug:
+                print(
+                    f"Move: {move}, PUCT: {puct_score:.4f}, Q: {q_value:.4f}, U: {u_value:.4f}, "
+                    f"Visits: {child.num_visits}, Prior: {prior:.4f}"
+                )
+
+        if puct_score > best_score:
+            best_score = puct_score
+            best_child = child
+
         return best_child
 
 
 class SupervisedMCTS:
-    def __init__(self, model_path, iterations=1000, exploration_constant=1.41, device=None):
+    def __init__(
+        self, model_path, iterations=1000, exploration_constant=1, device=None
+    ):
         self.iterations = iterations
         self.exploration_constant = exploration_constant
         self.samples = []  # will store tuples of (board state, outcome)
-        self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = (
+            device
+            if device is not None
+            else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        )
 
-        self.model = Connect4Net().to(self.device) #loading
+        self.model = Connect4Net().to(self.device)  # loading
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval()
+
+        self.root = None
 
     def evaluate_with_model(self, game: Connect4) -> float:
         """
@@ -76,115 +156,94 @@ class SupervisedMCTS:
         returns the value prediction (expected outcome) as a float in [-1, 1].
         """
         board = game.board
-        board_tensor = convert_board_to_tensor(board).unsqueeze(0)  # add batch dimension
+        board_tensor = convert_board_to_tensor(board).unsqueeze(
+            0
+        )  # add batch dimension
         with torch.no_grad():
             _, value = self.model(board_tensor)
         return value.item()
 
-    def rollout(self, game: Connect4, root_player: int) -> float:
+    # TODO use with PUCT for prior probabilities
+    def evaluate_policy_with_model(self, game: Connect4) -> np.ndarray:
         """
-        Evaluate the leaf node.
-        If the game is terminal, return a fixed reward:
-            +1.0 for a win, -1.0 for a loss, 0.0 for a draw.
-        Otherwise, return the network's value prediction.
+        evaluate the current game state using the trained model.
+        returns the policy prediction as a probability distribution over moves.
         """
-        result = game.evaluate_board()
-        if result is not None:
-            if result > 0:
-                winner = 1
-            elif result < 0:
-                winner = -1
-            else:
-                winner = 0
+        board = game.board
+        board_tensor = convert_board_to_tensor(board).unsqueeze(0)
+        with torch.no_grad():
+            policy_logits, _ = self.model(board_tensor)
+        policy = torch.softmax(policy_logits, dim=1).cpu().numpy().flatten()
+        return policy
 
-            if winner == root_player:
-                return 1.0
-            elif winner == 0:
-                return 0.0
-            else:
-                return -1.0
+    def selection(self, node: MCTSNode):
+        while node.is_fully_expanded() and not node.is_terminal():
+            node = node.best_child(self.exploration_constant)
+        return node
 
-        # For a non-terminal state, use the model's prediction.
-        value = self.evaluate_with_model(game)
-        return value
+    def expansion(self, node: MCTSNode):
+        # no need to expand if the leaf is terminal
+        if node.is_terminal():
+            return node
 
+        action = random.choice(node.untried_moves)
+        node.untried_moves.remove(action)
+
+        new_game = clone_game(node.game)
+        new_game.make_move(action)
+
+        child_node = MCTSNode(new_game, parent=node, move=action)
+        node.children[action] = child_node
+        return child_node
+
+    def rollout(self, node: MCTSNode):
+        # no need to "rollout" if the node is terminal
+        if node.is_terminal():
+            result = node.game.evaluate_board() * node.turn * -1
+            return result
+            # no scaling, but performs worse
+            # return 1.0 if result > 0 else -1.0 if result < 0 else 0.0
+        prediction = self.evaluate_with_model(node.game) * node.turn
+        return prediction
+        # no scaling, but performs worse
+        # return 1.0 if prediction > 0 else -1.0 if prediction < 0 else 0.0
+
+    def backpropagation(self, node: MCTSNode, result: float):
+        while node is not None:
+            node.num_visits += 1
+            node.total_score += result * node.turn
+            node = node.parent
+
+    # supervised mcts
     def search(self, game: Connect4) -> np.ndarray:
         """
         Run MCTS simulations from the given game state using the trained model at the leaf nodes.
         Returns a probability vector over moves (for every column) derived from the visit counts at the root.
         """
-        root_player = 1
         root_node = MCTSNode(clone_game(game))
+        self.root = root_node
 
         for _ in range(self.iterations):
-            node = root_node
-            simulation_game = clone_game(game)
+            # 1.) SELECTION
+            leaf = self.selection(root_node)
 
-            #selection process
-            while node.is_fully_expanded() and node.children:
-                node = node.best_child(self.exploration_constant)
-                simulation_game.make_move(node.move)
+            # 2.) EXPANSION
+            child = self.expansion(leaf)
 
-            #expansion process
-            if node.untried_moves:
-                move = random.choice(node.untried_moves)
-                simulation_game.make_move(move)
-                node.untried_moves.remove(move)
-                child_node = MCTSNode(clone_game(simulation_game), parent=node, move=move)
-                node.children[move] = child_node
-                node = child_node
+            # 3.) SIMULATION
+            result = self.rollout(child)
 
-            #save the board state from where the evaluation will start.
-            sample_state = np.copy(simulation_game.board)
+            # 4.) BACKPROPAGATION
+            self.backpropagation(child, result)
 
-            #evaluation using the Model instead of rollout as we discussed.
-            reward = self.rollout(clone_game(simulation_game), root_player)
-
-            #save the sample
-            self.samples.append((sample_state, reward))
-
-            #backpropogation
-            current_reward = reward
-            while node is not None:
-                node.visits += 1
-                node.wins += current_reward
-                current_reward = -current_reward  # flip reward for the opponent
-                node = node.parent
-
-        #compute move probabilities for the root node using normalized visit counts.
-        move_visits = {move: child.visits for move, child in root_node.children.items()}
-        total_visits = sum(move_visits.values())
-        move_avg_scores = {move: (child.wins / child.visits) for move, child in root_node.children.items() if child.visits > 0}
-
-        # Normalize average scores to a common scale (e.g., rescale to [0,1] if possible).
-        # For example, if values are in [-1, 1]:
-        normalized_avg = {move: (score + 1) / 2 for move, score in move_avg_scores.items()}
-
-        # Compute a combined score. Let alpha weight the average value.
-        alpha = 0.5
-        combined_score = {}
-        for move in move_visits:
-            visits_score = move_visits[move] / total_visits
-            value_score = normalized_avg.get(move, 0.0)
-            combined_score[move] = alpha * value_score + (1 - alpha) * visits_score
-
-        # Create probability distribution via softmax (or simply pick the max).
-        scores = np.array([combined_score.get(move, 0) for move in range(game.num_of_cols)])
-        temperature = 1.0
-        exp_scores = np.exp(scores / temperature)  # temperature can be tuned
-        if exp_scores.sum() > 0:
-            move_probs = exp_scores / exp_scores.sum()
-        else:
-            move_probs = np.zeros_like(scores)
-        return move_probs
-
-
-
-        move_visits = {move: child.visits for move, child in root_node.children.items()}
+        # Compute move probabilities based on visit counts
+        move_visits = {
+            move: child.num_visits for move, child in root_node.children.items()
+        }
         total_visits = sum(move_visits.values())
         move_probs = np.zeros(game.num_of_cols)
         for move, visits in move_visits.items():
-            move_probs[move] = visits / total_visits
+            move_probs[move] = visits / total_visits if total_visits > 0 else 0.0
         return move_probs
 
     def predict(self, game: Connect4):
@@ -194,7 +253,9 @@ class SupervisedMCTS:
             - policy: A probability distribution over moves (numpy array).
             - value: A scalar value prediction in [-1, 1].
         """
-        board_tensor = convert_board_to_tensor(game.board).unsqueeze(0)  # add batch dimension
+        board_tensor = convert_board_to_tensor(game.board).unsqueeze(
+            0
+        )  # add batch dimension
         with torch.no_grad():
             policy_logits, value = self.model(board_tensor)
         # Convert logits to probabilities
@@ -222,7 +283,9 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
 
     model_path = "models/connect4_4x4_supervised.pt"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    mcts = SupervisedMCTS(model_path=model_path, iterations=mcts_iterations, device=device)
+    mcts = SupervisedMCTS(
+        model_path=model_path, iterations=mcts_iterations, device=device
+    )
     solver_accuracy = Solver(Connect4(num_of_rows=4, num_of_cols=4))
 
     for _ in tqdm(range(num_samples), desc="Evaluating random positions", unit="game"):
@@ -266,61 +329,8 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
     print(f"SupervisedMCTS Accuracy: {accuracy:.2f}% over {total} evaluated positions.")
 
 
-def evaluate_model_soft_accuracy(num_samples=100, threshold=0.01, mcts_iterations=500):
-    """
-    Evaluate the model's soft policy accuracy over a set of random nonterminal board positions.
-    For each board:
-      - Use the trained model (via SupervisedMCTS.predict) to get a predicted policy.
-      - Use the Solver (minimax) to get the target policy.
-    A prediction is considered "good" if the predicted move's probability is within
-    `threshold` of the maximum target probability.
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = "models/connect4_4x4_supervised.pt"
-    mcts = SupervisedMCTS(model_path=model_path, iterations=mcts_iterations, device=device)
-    
-    good_enough = 0
-    total = 0
-
-    for _ in range(num_samples):
-        game = Connect4(num_of_rows=4, num_of_cols=4)
-        num_moves = random.randint(0, 5)
-        for _ in range(num_moves):
-            legal_moves = game.get_legal_moves()
-            if not legal_moves:
-                break
-            move = random.choice(legal_moves)
-            game.make_move(move)
-            # stop if the game becomes terminal.
-            if game.evaluate_board() is not None:
-                break
-
-        # skip terminal positions.
-        if game.evaluate_board() is not None:
-            continue
-
-        # use the model to predict the policy.
-        pred_policy, _ = mcts.predict(game)
-        solver = Solver(game)
-        target_policy, _ = solver.evaluate_state()
-
-        # consider the prediction "good" if the predicted move (argmax of pred_policy)
-        # has a target probability within threshold of the maximum target probability.
-        pred_move = int(np.argmax(pred_policy))
-        max_target = np.max(target_policy)
-        if target_policy[pred_move] >= (max_target - threshold):
-            good_enough += 1
-        total += 1
-
-    if total > 0:
-        accuracy = (good_enough / total) * 100
-        print(f"Soft Policy Accuracy: {accuracy:.2f}% over {total} samples.")
-    else:
-        print("No nonterminal samples available for evaluation.")
-
-
 def evaluate_supervised_mcts_on_test_data(
-    num_samples=None, mcts_iterations=800
+    exploration_constant, num_samples=None, mcts_iterations=800
 ):
     """
     Evaluate SupervisedMCTS on the held-out 20% test data from the generated training set.
@@ -330,6 +340,10 @@ def evaluate_supervised_mcts_on_test_data(
     A prediction is considered correct if the predicted move's target probability is within
     `threshold` of the maximum target probability.
     """
+
+    print(
+        f"Evaluating SupervisedMCTS on test data with exploration constant: {exploration_constant}, and iterations: {mcts_iterations}"
+    )
     # Load the full dataset that was generated earlier.
     data_path = "data/connect4_4x4_training_data.npy"
     transformer = DataTransformer(data_path, batch_size=1)
@@ -348,14 +362,20 @@ def evaluate_supervised_mcts_on_test_data(
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_path = "models/connect4_4x4_supervised.pt"
-    mcts = SupervisedMCTS(
-        model_path=model_path, iterations=mcts_iterations, device=device
-    )
 
     correct = 0
+    incorrect = 0
     total = 0
 
     for i in tqdm(range(num_samples), desc="Evaluating MCTS", unit="board"):
+
+        mcts = SupervisedMCTS(
+            model_path=model_path,
+            iterations=mcts_iterations,
+            device=device,
+            exploration_constant=exploration_constant,
+        )
+
         board = eval_boards[i]
         target_policy = eval_target_policy[i]
         target_value = eval_target_value[i]
@@ -376,18 +396,15 @@ def evaluate_supervised_mcts_on_test_data(
         # Consider the prediction correct if the predicted move is any of the best moves
         if pred_move in policy_moves:
             correct += 1
+        else:
+            # game.print_pretty()
+            incorrect += 1
         total += 1
 
     accuracy = (correct / total) * 100 if total > 0 else 0.0
-    print(f"SupervisedMCTS Test Data Accuracy: {accuracy:.2f}% over {total} samples.")
+    incorrect = total - correct
+    print(
+        f"SupervisedMCTS Test Data Accuracy: {accuracy:.2f}% over {total} samples. {incorrect} incorrect."
+    )
 
-
-# evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=800)
-
-# TODO: evaluate using "search", rather than "predict" to get the best move from MCTS.
-# evaluate_model_soft_accuracy(num_samples=100, threshold=0.01, mcts_iterations=500)
-
-
-evaluate_supervised_mcts_on_test_data(
-    num_samples=300, mcts_iterations=2000
-)
+    return accuracy
