@@ -93,13 +93,13 @@ class SupervisedMCTS:
 
     def rollout(self, game: Connect4, root_player: int) -> float:
         """
-        using the trained model to evaluate the leaf node.
-        if the game is terminal, compute a scaled reward based on move count (as before).
-        otherwise, return the network's value prediction.
+        Evaluate the leaf node.
+        If the game is terminal, return a fixed reward:
+            +1.0 for a win, -1.0 for a loss, 0.0 for a draw.
+        Otherwise, return the network's value prediction.
         """
         result = game.evaluate_board()
         if result is not None:
-            worst_case = game.num_of_rows * game.num_of_cols
             if result > 0:
                 winner = 1
             elif result < 0:
@@ -107,15 +107,14 @@ class SupervisedMCTS:
             else:
                 winner = 0
 
-            scaled = (worst_case - game.move_count) / worst_case
             if winner == root_player:
-                return scaled
+                return 1.0
             elif winner == 0:
                 return 0.0
             else:
-                return -scaled
+                return -1.0
 
-        # if non-terminal state then use the model's prediction.
+        # For a non-terminal state, use the model's prediction.
         value = self.evaluate_with_model(game)
         return value
 
@@ -163,6 +162,34 @@ class SupervisedMCTS:
                 node = node.parent
 
         #compute move probabilities for the root node using normalized visit counts.
+        move_visits = {move: child.visits for move, child in root_node.children.items()}
+        total_visits = sum(move_visits.values())
+        move_avg_scores = {move: (child.wins / child.visits) for move, child in root_node.children.items() if child.visits > 0}
+
+        # Normalize average scores to a common scale (e.g., rescale to [0,1] if possible).
+        # For example, if values are in [-1, 1]:
+        normalized_avg = {move: (score + 1) / 2 for move, score in move_avg_scores.items()}
+
+        # Compute a combined score. Let alpha weight the average value.
+        alpha = 0.5
+        combined_score = {}
+        for move in move_visits:
+            visits_score = move_visits[move] / total_visits
+            value_score = normalized_avg.get(move, 0.0)
+            combined_score[move] = alpha * value_score + (1 - alpha) * visits_score
+
+        # Create probability distribution via softmax (or simply pick the max).
+        scores = np.array([combined_score.get(move, 0) for move in range(game.num_of_cols)])
+        temperature = 1.0
+        exp_scores = np.exp(scores / temperature)  # temperature can be tuned
+        if exp_scores.sum() > 0:
+            move_probs = exp_scores / exp_scores.sum()
+        else:
+            move_probs = np.zeros_like(scores)
+        return move_probs
+
+
+
         move_visits = {move: child.visits for move, child in root_node.children.items()}
         total_visits = sum(move_visits.values())
         move_probs = np.zeros(game.num_of_cols)
@@ -372,5 +399,5 @@ def evaluate_supervised_mcts_on_test_data(
 
 
 evaluate_supervised_mcts_on_test_data(
-    num_samples=300, mcts_iterations=800
+    num_samples=300, mcts_iterations=2000
 )
