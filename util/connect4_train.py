@@ -7,6 +7,7 @@ import os
 from util.data_transformer import DataTransformer
 from networks.Connect4Net import Connect4Net
 
+
 # Set seed for reproducibility
 torch.manual_seed(42)
 np.random.seed(42)
