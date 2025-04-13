@@ -133,3 +133,18 @@ def test_solver_flipping():
     # game.flip_board()  # flip the board to visualize the next player's turn
     assert game.board[3][0] == 1
     assert game.board[3][1] == -1
+
+def test_connect4_undo():
+    game = Connect4(num_of_rows=4, num_of_cols=4)
+    game.make_move(0)
+    game.make_move(1)
+
+    assert game.board[3][0] == 1
+    assert game.board[3][1] == -1
+    assert game.move_count == 2
+
+    game.undo_move()
+
+    assert game.board[3][0] == -1
+    assert game.board[3][1] == 0
+    assert game.move_count == 1
