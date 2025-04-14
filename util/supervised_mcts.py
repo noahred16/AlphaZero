@@ -9,6 +9,9 @@ from util.solver import Solver
 from util.data_transformer import DataTransformer, convert_board_to_tensor
 from networks.Connect4Net import Connect4Net
 from tqdm import tqdm
+import graphviz
+import io
+from contextlib import redirect_stdout
 
 # Set seed for reproducibility
 torch.manual_seed(42)
@@ -43,6 +46,7 @@ class MCTSNode:
         self.untried_moves = (
             game.get_legal_moves()
         )  # moves that have not yet been expanded
+        self.ucb_score = None
         if self.parent is not None:
             self.turn = -self.parent.turn
         else:
@@ -56,7 +60,9 @@ class MCTSNode:
 
     def get_ucb(self, exploration_constant):
         if self.num_visits == 0:
-            return float("inf")
+            score = float("inf")
+            self.ucb_score = score
+            return score
 
         exploitation = (self.total_score / self.num_visits) * self.turn
 
@@ -64,17 +70,29 @@ class MCTSNode:
             math.log(self.parent.num_visits) / self.num_visits
         )
 
-        return exploitation + exploration
+        score = exploitation + exploration
+        self.ucb_score = score
+        return score
 
     def best_child(self, exploration_param=0):
         best_node = None
         best_value = float("-inf")
 
+        vals = {}
+        num_visits = {}
         for move, child in self.children.items():
-            value = child.get_ucb(exploration_param)
+            value = child.get_ucb(exploration_param)  # * self.turn
+            vals[move] = value
+            num_visits[move] = child.num_visits
+
             if value > best_value:
                 best_value = value
                 best_node = child
+
+        # rounded_vals = {move: round(val, 2) for move, val in vals.items()}
+        # self.game.print_pretty()
+        # print(f"UCB values: {rounded_vals}")
+        # print(f"Visit counts: {num_visits}")
 
         return best_node
 
@@ -149,6 +167,66 @@ class SupervisedMCTS:
         self.model.eval()
 
         self.root = None
+
+    def tree_visualization(self):
+        def add_node(node: MCTSNode, graph: graphviz.Digraph):
+            node_id = str(id(node))
+
+            # Capture the output of print_pretty()
+            output = io.StringIO()
+            with redirect_stdout(output):
+                # deep copy the board
+                copy = node.game.board.copy()
+                # flip the board for display
+                copy = copy * node.turn
+                game = Connect4(
+                    board=copy,
+                    num_of_rows=node.game.num_of_rows,
+                    num_of_cols=node.game.num_of_cols,
+                )
+                game.print_pretty()
+
+            game_display = output.getvalue()
+
+            ucb = round(node.ucb_score, 2) if node.ucb_score is not None else "N/A"
+
+            exploration = (
+                round(
+                    self.exploration_constant
+                    * math.sqrt(math.log(node.parent.num_visits) / node.num_visits),
+                    3,
+                )
+                if node.parent is not None and node.num_visits > 0
+                else "N/A"
+            )
+
+            # Format the label with statistics and game state
+            label = f"Move: {node.move if node.move is not None else 'Root'}\nVisits: {node.num_visits}\nScore: {node.total_score:.2f}\nAvg Score: {node.total_score / node.num_visits:.2f}\nExploration: {exploration}\nUCB: {ucb}\n"
+            label += game_display
+
+            # Replace newlines with \n for proper display in graphviz
+            label = label.replace("\n", "\\n")
+
+            graph.node(node_id, label=label)
+
+            if node.parent is not None:
+                graph.edge(str(id(node.parent)), node_id, label=str(node.move))
+
+            for move in sorted(node.children.keys()):
+                child = node.children[move]
+                add_node(child, graph)
+
+        # Create a graph with a larger node size to accommodate the game display
+        graph = graphviz.Digraph(format="png")
+        graph.attr(
+            "node", shape="box", fontname="Courier New"
+        )  # Monospace font for game display
+
+        add_node(self.root, graph)
+
+        file_name = "mcts_tree"
+        graph.render(file_name, cleanup=True)
+        print(f"Tree visualization saved as {file_name}.png")
 
     def evaluate_with_model(self, game: Connect4) -> float:
         """
@@ -398,6 +476,10 @@ def evaluate_supervised_mcts_on_test_data(
             correct += 1
         else:
             # game.print_pretty()
+            # print(
+            #     f"Predicted move: {pred_move} with value: {max_pred}, but best moves were: {policy_moves}"
+            # )
+            # print(f"Policy: {pred_policy}")
             incorrect += 1
         total += 1
 
