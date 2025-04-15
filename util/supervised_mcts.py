@@ -64,7 +64,7 @@ class MCTSNode:
             self.ucb_score = score
             return score
 
-        exploitation = (self.total_score / self.num_visits) * self.turn
+        exploitation = (self.total_score / self.num_visits) * -1 * self.turn
 
         exploration = exploration_constant * math.sqrt(
             math.log(self.parent.num_visits) / self.num_visits
@@ -81,18 +81,13 @@ class MCTSNode:
         vals = {}
         num_visits = {}
         for move, child in self.children.items():
-            value = child.get_ucb(exploration_param)  # * self.turn
+            value = child.get_ucb(exploration_param)
             vals[move] = value
             num_visits[move] = child.num_visits
 
             if value > best_value:
                 best_value = value
                 best_node = child
-
-        # rounded_vals = {move: round(val, 2) for move, val in vals.items()}
-        # self.game.print_pretty()
-        # print(f"UCB values: {rounded_vals}")
-        # print(f"Visit counts: {num_visits}")
 
         return best_node
 
@@ -201,7 +196,7 @@ class SupervisedMCTS:
             )
 
             # Format the label with statistics and game state
-            label = f"Move: {node.move if node.move is not None else 'Root'}\nVisits: {node.num_visits}\nScore: {node.total_score:.2f}\nAvg Score: {node.total_score / node.num_visits:.2f}\nExploration: {exploration}\nUCB: {ucb}\n"
+            label = f"Move: {node.move if node.move is not None else 'Root'}\nTotal Score: {node.total_score:.2f}\nVisits: {node.num_visits}\nAvg Score: {node.total_score / node.num_visits:.2f}\nExploration: {exploration}\nUCB: {ucb}\n Player: {"X" if node.turn == 1 else "O"}\n"
             label += game_display
 
             # Replace newlines with \n for proper display in graphviz
@@ -289,7 +284,7 @@ class SupervisedMCTS:
     def backpropagation(self, node: MCTSNode, result: float):
         while node is not None:
             node.num_visits += 1
-            node.total_score += result * node.turn
+            node.total_score += result
             node = node.parent
 
     # supervised mcts
@@ -359,7 +354,7 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
     correct = 0
     total = 0
 
-    model_path = "models/connect4_4x4_supervised.pt"
+    model_path = "models/connect4_4x4_supervised_100k.pt"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     mcts = SupervisedMCTS(
         model_path=model_path, iterations=mcts_iterations, device=device
@@ -423,7 +418,7 @@ def evaluate_supervised_mcts_on_test_data(
         f"Evaluating SupervisedMCTS on test data with exploration constant: {exploration_constant}, and iterations: {mcts_iterations}"
     )
     # Load the full dataset that was generated earlier.
-    data_path = "data/connect4_4x4_training_data.npy"
+    data_path = "data/connect4_4x4_training_data_100k.npy"
     transformer = DataTransformer(data_path, batch_size=1)
 
     # 2,000 test data samples (20% test from original 10,000 samples)
@@ -439,7 +434,7 @@ def evaluate_supervised_mcts_on_test_data(
         num_samples = min(num_samples, len(eval_boards))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = "models/connect4_4x4_supervised.pt"
+    model_path = "models/connect4_4x4_supervised_100k.pt"
 
     correct = 0
     incorrect = 0

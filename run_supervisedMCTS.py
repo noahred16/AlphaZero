@@ -4,9 +4,9 @@ import torch
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_path = "models/connect4_4x4_supervised.pt"
+model_path = "models/connect4_4x4_supervised_100k.pt"
 
-iterations = 100
+iterations = 800
 exploration_constant = 1.5
 
 cases = [
@@ -56,12 +56,13 @@ for i, case in enumerate(cases):
     move_probs = supervised_mcts.search(game)
     print(f"Case {i+1}: Move probabilities: {move_probs}")
 
+    # creates a tree visualization png
     supervised_mcts.tree_visualization()
 
 
 # evaluate on test data
 accuracy = evaluate_supervised_mcts_on_test_data(
-    num_samples=100,
+    num_samples=20_000,
     mcts_iterations=iterations,
     exploration_constant=exploration_constant,
 )
