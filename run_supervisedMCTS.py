@@ -1,7 +1,7 @@
 from util.supervised_mcts import SupervisedMCTS, evaluate_supervised_mcts_on_test_data
 from games.connect4 import Connect4
 import torch
-
+import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_path = "models/connect4_4x4_supervised_100k.pt"
@@ -48,7 +48,13 @@ for i, case in enumerate(cases):
         model_path=model_path,
         iterations=iterations,
         exploration_constant=exploration_constant,
+        selection_method="PUCT",
     )
+
+    # priors
+    policy_priors = supervised_mcts.evaluate_policy_with_model(game)
+    # round to 3 decimal places
+    print("Policy priors:", np.round(policy_priors, 2))
 
     # can test specific games
     game.print_pretty()
