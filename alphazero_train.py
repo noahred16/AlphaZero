@@ -15,7 +15,7 @@ np.random.seed(42)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load the training data using the DataTransformer (the same data as before)
-data_path = "data/connect4_4x4_training_data.npy"
+data_path = "data/connect4_4x4_training_data_100k.npy"
 data_transformer = DataTransformer(data_path)
 train_loader = data_transformer.get_training_data()
 test_loader = data_transformer.get_testing_data()

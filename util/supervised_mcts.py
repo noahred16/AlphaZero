@@ -9,6 +9,9 @@ from util.solver import Solver
 from util.data_transformer import DataTransformer, convert_board_to_tensor
 from networks.Connect4Net import Connect4Net
 from tqdm import tqdm
+import graphviz
+import io
+from contextlib import redirect_stdout
 
 # Set seed for reproducibility
 torch.manual_seed(42)
@@ -43,6 +46,7 @@ class MCTSNode:
         self.untried_moves = (
             game.get_legal_moves()
         )  # moves that have not yet been expanded
+        self.ucb_score = None
         if self.parent is not None:
             self.turn = -self.parent.turn
         else:
@@ -56,22 +60,31 @@ class MCTSNode:
 
     def get_ucb(self, exploration_constant):
         if self.num_visits == 0:
-            return float("inf")
+            score = float("inf")
+            self.ucb_score = score
+            return score
 
-        exploitation = (self.total_score / self.num_visits) * self.turn
+        exploitation = (self.total_score / self.num_visits) * -1 * self.turn
 
         exploration = exploration_constant * math.sqrt(
             math.log(self.parent.num_visits) / self.num_visits
         )
 
-        return exploitation + exploration
+        score = exploitation + exploration
+        self.ucb_score = score
+        return score
 
     def best_child(self, exploration_param=0):
         best_node = None
         best_value = float("-inf")
 
+        vals = {}
+        num_visits = {}
         for move, child in self.children.items():
             value = child.get_ucb(exploration_param)
+            vals[move] = value
+            num_visits[move] = child.num_visits
+
             if value > best_value:
                 best_value = value
                 best_node = child
@@ -150,6 +163,66 @@ class SupervisedMCTS:
 
         self.root = None
 
+    def tree_visualization(self):
+        def add_node(node: MCTSNode, graph: graphviz.Digraph):
+            node_id = str(id(node))
+
+            # Capture the output of print_pretty()
+            output = io.StringIO()
+            with redirect_stdout(output):
+                # deep copy the board
+                copy = node.game.board.copy()
+                # flip the board for display
+                copy = copy * node.turn
+                game = Connect4(
+                    board=copy,
+                    num_of_rows=node.game.num_of_rows,
+                    num_of_cols=node.game.num_of_cols,
+                )
+                game.print_pretty()
+
+            game_display = output.getvalue()
+
+            ucb = round(node.ucb_score, 2) if node.ucb_score is not None else "N/A"
+
+            exploration = (
+                round(
+                    self.exploration_constant
+                    * math.sqrt(math.log(node.parent.num_visits) / node.num_visits),
+                    3,
+                )
+                if node.parent is not None and node.num_visits > 0
+                else "N/A"
+            )
+
+            # Format the label with statistics and game state
+            label = f"Move: {node.move if node.move is not None else 'Root'}\nTotal Score: {node.total_score:.2f}\nVisits: {node.num_visits}\nAvg Score: {node.total_score / node.num_visits:.2f}\nExploration: {exploration}\nUCB: {ucb}\n Player: {'X' if node.turn == 1 else 'O'}\n"
+            label += game_display
+
+            # Replace newlines with \n for proper display in graphviz
+            label = label.replace("\n", "\\n")
+
+            graph.node(node_id, label=label)
+
+            if node.parent is not None:
+                graph.edge(str(id(node.parent)), node_id, label=str(node.move))
+
+            for move in sorted(node.children.keys()):
+                child = node.children[move]
+                add_node(child, graph)
+
+        # Create a graph with a larger node size to accommodate the game display
+        graph = graphviz.Digraph(format="png")
+        graph.attr(
+            "node", shape="box", fontname="Courier New"
+        )  # Monospace font for game display
+
+        add_node(self.root, graph)
+
+        file_name = "mcts_tree"
+        graph.render(file_name, cleanup=True)
+        print(f"Tree visualization saved as {file_name}.png")
+
     def evaluate_with_model(self, game: Connect4) -> float:
         """
         evaluate the current game state using the trained model.
@@ -211,7 +284,7 @@ class SupervisedMCTS:
     def backpropagation(self, node: MCTSNode, result: float):
         while node is not None:
             node.num_visits += 1
-            node.total_score += result * node.turn
+            node.total_score += result
             node = node.parent
 
     # supervised mcts
@@ -281,7 +354,7 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
     correct = 0
     total = 0
 
-    model_path = "models/connect4_4x4_supervised.pt"
+    model_path = "models/connect4_4x4_supervised_100k.pt"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     mcts = SupervisedMCTS(
         model_path=model_path, iterations=mcts_iterations, device=device
@@ -345,7 +418,7 @@ def evaluate_supervised_mcts_on_test_data(
         f"Evaluating SupervisedMCTS on test data with exploration constant: {exploration_constant}, and iterations: {mcts_iterations}"
     )
     # Load the full dataset that was generated earlier.
-    data_path = "data/connect4_4x4_training_data.npy"
+    data_path = "data/connect4_4x4_training_data_100k.npy"
     transformer = DataTransformer(data_path, batch_size=1)
 
     # 2,000 test data samples (20% test from original 10,000 samples)
@@ -361,7 +434,7 @@ def evaluate_supervised_mcts_on_test_data(
         num_samples = min(num_samples, len(eval_boards))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = "models/connect4_4x4_supervised.pt"
+    model_path = "models/connect4_4x4_supervised_100k.pt"
 
     correct = 0
     incorrect = 0
@@ -398,6 +471,10 @@ def evaluate_supervised_mcts_on_test_data(
             correct += 1
         else:
             # game.print_pretty()
+            # print(
+            #     f"Predicted move: {pred_move} with value: {max_pred}, but best moves were: {policy_moves}"
+            # )
+            # print(f"Policy: {pred_policy}")
             incorrect += 1
         total += 1
 

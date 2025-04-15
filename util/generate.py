@@ -34,12 +34,19 @@ def decode_board(hash_key):
     return state, value
 
 
-num_samples = 10_000
+def flip_board(state):
+    # Flip the board horizontally
+    return np.array([row[::-1] for row in state])
+
+
+num_samples = 100_000
 # num_samples = 100
 
 policy, value = solver.evaluate_state()
+move_count = 0
 with tqdm(total=num_samples, desc="Generating samples") as pbar:
     while len(training_data) < num_samples:
+        move_count += 1
         # genration policy: 80% chance to move random
         if random.random() < 0.80:
             legal_moves = game.get_legal_moves()
@@ -55,14 +62,27 @@ with tqdm(total=num_samples, desc="Generating samples") as pbar:
 
         if game.result is not None:
             game.reset()
+            move_count = 0
 
-        policy, value = solver.evaluate_state()
+        if move_count <= 3:  # save some time, for 4x4 first 3 moves, all ties.
+            policy = [0.25, 0.25, 0.25, 0.25]
+            value = 0.0
+        else:
+            policy, value = solver.evaluate_state()
 
         # add entry to training_data if the game state is unique
         hash_key = hash_board(game.board, value)
         if hash_key not in unique_states:
             unique_states.add(hash_key)
             training_data.append((game.board.copy(), policy.copy(), value))
+            pbar.update(1)
+        # add mirror to training_data
+        flipped_board = flip_board(game.board)
+        hash_key_flipped = hash_board(flipped_board, value)
+        if hash_key_flipped not in unique_states:
+            unique_states.add(hash_key_flipped)
+            flipped_policy = policy[::-1]
+            training_data.append((flipped_board.copy(), flipped_policy, value))
             pbar.update(1)
 
 # Summary
@@ -85,7 +105,7 @@ for i in range(10):
     print(value)
 
 
-file_name = "data/connect4_4x4_training_data.npy"
+file_name = "data/connect4_4x4_training_data_100k.npy"
 
 # are you sure.
 file_exists = os.path.isfile(file_name)
