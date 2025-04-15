@@ -196,7 +196,7 @@ class SupervisedMCTS:
             )
 
             # Format the label with statistics and game state
-            label = f"Move: {node.move if node.move is not None else 'Root'}\nTotal Score: {node.total_score:.2f}\nVisits: {node.num_visits}\nAvg Score: {node.total_score / node.num_visits:.2f}\nExploration: {exploration}\nUCB: {ucb}\n Player: {"X" if node.turn == 1 else "O"}\n"
+            label = f"Move: {node.move if node.move is not None else 'Root'}\nTotal Score: {node.total_score:.2f}\nVisits: {node.num_visits}\nAvg Score: {node.total_score / node.num_visits:.2f}\nExploration: {exploration}\nUCB: {ucb}\n Player: {'X' if node.turn == 1 else 'O'}\n"
             label += game_display
 
             # Replace newlines with \n for proper display in graphviz
