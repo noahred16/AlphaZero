@@ -145,20 +145,14 @@ class MCTSNode:
 
 
 class SupervisedMCTS:
-    def __init__(
-        self, model_path, iterations=1000, exploration_constant=1, device=None
-    ):
+    def __init__(self, model_path, iterations=1000, exploration_constant=1):
         self.iterations = iterations
         self.exploration_constant = exploration_constant
         self.samples = []  # will store tuples of (board state, outcome)
-        self.device = (
-            device
-            if device is not None
-            else torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        )
 
-        self.model = Connect4Net().to(self.device)  # loading
-        self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model = Connect4Net().to(device)  # loading
+        self.model.load_state_dict(torch.load(model_path, map_location=device))
         self.model.eval()
 
         self.root = None
@@ -355,10 +349,7 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
     total = 0
 
     model_path = "models/connect4_4x4_supervised_100k.pt"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    mcts = SupervisedMCTS(
-        model_path=model_path, iterations=mcts_iterations, device=device
-    )
+    mcts = SupervisedMCTS(model_path=model_path, iterations=mcts_iterations)
     solver_accuracy = Solver(Connect4(num_of_rows=4, num_of_cols=4))
 
     for _ in tqdm(range(num_samples), desc="Evaluating random positions", unit="game"):
@@ -433,7 +424,6 @@ def evaluate_supervised_mcts_on_test_data(
     else:
         num_samples = min(num_samples, len(eval_boards))
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_path = "models/connect4_4x4_supervised_100k.pt"
 
     correct = 0
@@ -445,7 +435,6 @@ def evaluate_supervised_mcts_on_test_data(
         mcts = SupervisedMCTS(
             model_path=model_path,
             iterations=mcts_iterations,
-            device=device,
             exploration_constant=exploration_constant,
         )
 

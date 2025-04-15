@@ -46,7 +46,6 @@ for i, case in enumerate(cases):
 
     supervised_mcts = SupervisedMCTS(
         model_path=model_path,
-        device=device,
         iterations=iterations,
         exploration_constant=exploration_constant,
     )

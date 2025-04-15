@@ -8,10 +8,9 @@ import torch
 
 def test_supervised_mcts_search():
     model_path = "models/connect4_4x4_supervised.pt"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     iterations = 800
     supervised_mcts = SupervisedMCTS(
-        model_path=model_path, device=device, iterations=iterations
+        model_path=model_path, iterations=iterations
     )
 
     game = Connect4(num_of_rows=4, num_of_cols=4)
@@ -75,7 +74,7 @@ def test_sup_mcts_search():
 
     iterations = 800
     supervised_mcts = SupervisedMCTS(
-        model_path=model_path, device=device, iterations=iterations
+        model_path=model_path, iterations=iterations
     )
 
     move_probs = supervised_mcts.search(game)
