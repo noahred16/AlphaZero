@@ -28,35 +28,8 @@ print(f"Testing dataset size: {len(test_loader.dataset)}")
 
 ############################### Training Loop ###############################
 model = Connect4Net().to(device)
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
-policy_loss_fn = nn.CrossEntropyLoss()
-value_loss_fn = nn.MSELoss()
-
 EPOCHS = 10
-
-for epoch in range(EPOCHS):
-    model.train()
-    total_loss = 0
-    for boards, target_policy, target_value in train_loader:
-        optimizer.zero_grad()
-
-        pred_policy_logits, pred_value = model(boards)
-
-        # Policy: target is a probability distribution (soft labels), so use log_softmax + KLDivLoss or soft cross-entropy
-        policy_log_probs = torch.log_softmax(pred_policy_logits, dim=1)
-        policy_loss = torch.sum(-target_policy * policy_log_probs) / target_policy.size(
-            0
-        )
-
-        # Value: simple MSE
-        value_loss = value_loss_fn(pred_value, target_value)
-
-        loss = policy_loss + value_loss
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
-
-    print(f"Epoch {epoch+1} | Loss: {total_loss:.4f}")
+model.train_on_batch(train_loader, EPOCHS)
 
 
 ############################### Save the Trained Model ###############################

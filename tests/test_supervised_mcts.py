@@ -4,12 +4,16 @@ from util.solver import Solver
 from util.supervised_mcts import SupervisedMCTS
 import numpy as np
 import torch
+from networks.Connect4Net import Connect4Net
 
 
 def test_supervised_mcts_search():
     model_path = "models/connect4_4x4_supervised_50k.pt"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = Connect4Net().to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
     iterations = 800
-    supervised_mcts = SupervisedMCTS(model_path=model_path, iterations=iterations)
+    supervised_mcts = SupervisedMCTS(model=model, iterations=iterations)
 
     game = Connect4(num_of_rows=4, num_of_cols=4)
 
@@ -68,9 +72,12 @@ def test_sup_mcts_search():
     )
     game = Connect4(num_of_rows=4, num_of_cols=4, board=board)
     model_path = "models/connect4_4x4_supervised_50k.pt"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = Connect4Net().to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
 
     iterations = 800
-    supervised_mcts = SupervisedMCTS(model_path=model_path, iterations=iterations)
+    supervised_mcts = SupervisedMCTS(model=model, iterations=iterations)
 
     move_probs = supervised_mcts.search(game)
 
@@ -125,8 +132,11 @@ def test_policy_eval():
     # game.print_pretty()  # for visual confirmation
 
     model_path = "models/connect4_4x4_supervised_50k.pt"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = Connect4Net().to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
     iterations = 800
-    supervised_mcts = SupervisedMCTS(model_path=model_path, iterations=iterations)
+    supervised_mcts = SupervisedMCTS(model=model, iterations=iterations)
 
     policy_priors = supervised_mcts.evaluate_policy_with_model(game)
     print("Policy priors:", np.round(policy_priors, 2))
