@@ -51,6 +51,7 @@ class MCTSNode:
             self.turn = -self.parent.turn
         else:
             self.turn = 1
+        self.policy_priors = None  # for PUCT selection method
 
     def is_fully_expanded(self):
         return len(self.untried_moves) == 0
@@ -127,11 +128,13 @@ class SupervisedMCTS:
         model_path,
         iterations=1000,
         exploration_constant=1,
-        selection_method="UCB-1",
+        selection_method="UCB-1",  # "PUCT" or "UCB-1"
+        method="Standard",  # "Standard" or "AlphaZero"
     ):
         self.iterations = iterations
         self.exploration_constant = exploration_constant
         self.selection_method = selection_method
+        self.method = method
 
         self.samples = []  # will store tuples of (board state, outcome)
 
@@ -227,21 +230,23 @@ class SupervisedMCTS:
 
     def selection(self, node: MCTSNode):
         while node.is_fully_expanded() and not node.is_terminal():
-            policy_priors = (
-                self.evaluate_policy_with_model(node.game)
-                if self.selection_method == "PUCT"
-                else None
-            )
+            if node.policy_priors is None and self.selection_method == "PUCT":
+                node.policy_priors = self.evaluate_policy_with_model(node.game)
             node = node.best_child(
                 exploration_param=self.exploration_constant,
                 selection_method=self.selection_method,
-                policy_priors=policy_priors,
+                policy_priors=node.policy_priors,
             )
         return node
 
     def expansion(self, node: MCTSNode):
         # no need to expand if the leaf is terminal
+        # no expansion if
         if node.is_terminal():
+            return node
+
+        # for standard MCTS, we don't expand on first visit but we do for AlphaZero.
+        if node.num_visits == 0 and self.method != "AlphaZero":
             return node
 
         action = random.choice(node.untried_moves)
@@ -385,7 +390,7 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
 
 
 def evaluate_supervised_mcts_on_test_data(
-    exploration_constant, num_samples=None, mcts_iterations=800
+    exploration_constant, num_samples=None, mcts_iterations=800, selection_method="PUCT"
 ):
     """
     Evaluate SupervisedMCTS on the held-out 20% test data from the generated training set.
@@ -427,6 +432,7 @@ def evaluate_supervised_mcts_on_test_data(
             model_path=model_path,
             iterations=mcts_iterations,
             exploration_constant=exploration_constant,
+            selection_method=selection_method,
         )
 
         board = eval_boards[i]
@@ -450,11 +456,11 @@ def evaluate_supervised_mcts_on_test_data(
         if pred_move in policy_moves:
             correct += 1
         else:
-            # game.print_pretty()
-            # print(
-            #     f"Predicted move: {pred_move} with value: {max_pred}, but best moves were: {policy_moves}"
-            # )
-            # print(f"Policy: {pred_policy}")
+            game.print_pretty()
+            print(
+                f"Predicted move: {pred_move} with value: {max_pred}, but best moves were: {policy_moves}"
+            )
+            print(f"Policy: {pred_policy}")
             incorrect += 1
         total += 1
 
