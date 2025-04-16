@@ -2,10 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class ResidualBlock(nn.Module):
     """
     A simple Residual Block with two convolution layers.
     """
+
     def __init__(self, channels):
         super().__init__()
         self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
@@ -20,8 +22,11 @@ class ResidualBlock(nn.Module):
         out += residual
         return F.relu(out)
 
+
 class AlphaZeroNet(nn.Module):
-    def __init__(self, board_size=(4, 4), num_channels=128, num_res_blocks=3, num_moves=4):
+    def __init__(
+        self, board_size=(4, 4), num_channels=128, num_res_blocks=3, num_moves=4
+    ):
         """
         board_size: tuple with (rows, cols) (for our case 4x4)
         num_channels: number of filters in the convolution layers
@@ -39,11 +44,13 @@ class AlphaZeroNet(nn.Module):
         )
 
         # Residual blocks
-        self.res_blocks = nn.Sequential(*[ResidualBlock(num_channels) for _ in range(num_res_blocks)])
+        self.res_blocks = nn.Sequential(
+            *[ResidualBlock(num_channels) for _ in range(num_res_blocks)]
+        )
 
         # Policy head: one convolution, flatten, and FC layer to output logits.
         self.policy_conv = nn.Sequential(
-            nn.Conv2d(num_channels, 2, kernel_size=1), 
+            nn.Conv2d(num_channels, 2, kernel_size=1),
             nn.BatchNorm2d(2),
             nn.ReLU(),
         )

@@ -4,10 +4,11 @@ import numpy as np
 import copy
 from games.connect4 import Connect4
 
+
 def clone_game(game: Connect4) -> Connect4:
     """
-    creates a copy of the Connect4 game state. 
-    done to make sure simulations does not affect original board state. 
+    creates a copy of the Connect4 game state.
+    done to make sure simulations does not affect original board state.
     """
     new_board = np.copy(game.board)
     new_game = Connect4(
@@ -22,14 +23,18 @@ def clone_game(game: Connect4) -> Connect4:
 
 
 class MCTSNode:
-    def __init__(self, game: Connect4, parent=None, move=None): # boiler plate stuff for initialization
+    def __init__(
+        self, game: Connect4, parent=None, move=None
+    ):  # boiler plate stuff for initialization
         self.game = game  # game state at this node (a clone of Connect4)
         self.parent = parent
         self.move = move  # the move that led to this node (None for the root)
         self.children = {}  # dictionary: move (int) -> child node
         self.visits = 0
         self.wins = 0.0  # cumulative reward (from the root's perspective)
-        self.untried_moves = game.get_legal_moves()  # moves that have not yet been expanded
+        self.untried_moves = (
+            game.get_legal_moves()
+        )  # moves that have not yet been expanded
 
     def is_fully_expanded(self):
         return len(self.untried_moves) == 0
@@ -42,7 +47,9 @@ class MCTSNode:
         best_child = None
         for move, child in self.children.items():
             # UCT formula: (wins/visits) + c * sqrt(ln(parent.visits)/child.visits)
-            score = (child.wins / child.visits) + exploration_constant * math.sqrt(math.log(self.visits) / child.visits)
+            score = (child.wins / child.visits) + exploration_constant * math.sqrt(
+                math.log(self.visits) / child.visits
+            )
             if score > best_score:
                 best_score = score
                 best_child = child
@@ -87,7 +94,7 @@ class MCTS:
     #             return 0  # tie if no moves available
     #         move = random.choice(legal_moves)
     #         game.make_move(move)
-    
+
     def rollout(self, game: Connect4, root_player: int) -> float:
         """
         Play out the game randomly until reaching a terminal state.
@@ -100,7 +107,9 @@ class MCTS:
         while True:
             result = game.evaluate_board()
             if result is not None:
-                worst_case = game.num_of_rows * game.num_of_cols  # maximum possible moves
+                worst_case = (
+                    game.num_of_rows * game.num_of_cols
+                )  # maximum possible moves
                 # Determine the winner based on the last move.
                 if result > 0:
                     winner = 1
@@ -139,7 +148,7 @@ class MCTS:
             node = root_node
             simulation_game = clone_game(game)
 
-            # selection process where we 
+            # selection process where we
             # traverse the tree by selecting the best child until reaching a node
             # that is not fully expanded or is terminal.
             while node.is_fully_expanded() and node.children:
@@ -152,11 +161,13 @@ class MCTS:
                 move = random.choice(node.untried_moves)
                 simulation_game.make_move(move)
                 node.untried_moves.remove(move)
-                child_node = MCTSNode(clone_game(simulation_game), parent=node, move=move)
+                child_node = MCTSNode(
+                    clone_game(simulation_game), parent=node, move=move
+                )
                 node.children[move] = child_node
                 node = child_node
 
-            #saving the board state from where the rollout will start.
+            # saving the board state from where the rollout will start.
             sample_state = np.copy(simulation_game.board)
 
             # running the rollout on this
