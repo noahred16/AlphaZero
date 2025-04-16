@@ -52,3 +52,12 @@ Notes:
 Ensure the training data file (`data/connect4_4x4_training_data.npy`) exists before running the script.
 The script splits the data into training (80%) and testing (20%) sets and trains the model for 10 epochs by default.
 
+## AlphaZero - Self Play
+Using the the generated training data games, we run mcts with an randomly initialized neural network.  
+In batches, lets say of 100, we can stop self-play and train the neural network with the results of those games.  
+
+
+The MuZero implementation (a successor to AlphaZero) reportedly uses a fixed-size replay buffer that continuously replaces old data, effectively implementing a sliding window approach that "forgets" early training data.  
+
+
+What we really care about is how good the generated training data is. We can run this and see how it does.  

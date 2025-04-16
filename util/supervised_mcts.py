@@ -125,7 +125,7 @@ class MCTSNode:
 class SupervisedMCTS:
     def __init__(
         self,
-        model_path,
+        model,
         iterations=1000,
         exploration_constant=1,
         selection_method="UCB-1",  # "PUCT" or "UCB-1"
@@ -138,9 +138,7 @@ class SupervisedMCTS:
 
         self.samples = []  # will store tuples of (board state, outcome)
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = Connect4Net().to(device)  # loading
-        self.model.load_state_dict(torch.load(model_path, map_location=device))
+        self.model = model
         self.model.eval()
 
         self.root = None
@@ -345,7 +343,10 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
     total = 0
 
     model_path = "models/connect4_4x4_supervised_50k.pt"
-    mcts = SupervisedMCTS(model_path=model_path, iterations=mcts_iterations)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = Connect4Net().to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    mcts = SupervisedMCTS(model=model, iterations=mcts_iterations)
     solver_accuracy = Solver(Connect4(num_of_rows=4, num_of_cols=4))
 
     for _ in tqdm(range(num_samples), desc="Evaluating random positions", unit="game"):
@@ -390,7 +391,11 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
 
 
 def evaluate_supervised_mcts_on_test_data(
-    exploration_constant, num_samples=None, mcts_iterations=800, selection_method="PUCT"
+    exploration_constant,
+    num_samples=None,
+    mcts_iterations=800,
+    selection_method="PUCT",
+    method="AlphaZero",
 ):
     """
     Evaluate SupervisedMCTS on the held-out 20% test data from the generated training set.
@@ -421,6 +426,11 @@ def evaluate_supervised_mcts_on_test_data(
         num_samples = min(num_samples, len(eval_boards))
 
     model_path = "models/connect4_4x4_supervised_50k.pt"
+    if method == "AlphaZero":
+        model_path = "models/connect4_4x4_alpha_zero_50k.pt"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = Connect4Net().to(device)
+    model.load_state_dict(torch.load(model_path, map_location=device))
 
     correct = 0
     incorrect = 0
@@ -429,10 +439,11 @@ def evaluate_supervised_mcts_on_test_data(
     for i in tqdm(range(num_samples), desc="Evaluating MCTS", unit="board"):
 
         mcts = SupervisedMCTS(
-            model_path=model_path,
+            model=model,
             iterations=mcts_iterations,
             exploration_constant=exploration_constant,
             selection_method=selection_method,
+            method=method,
         )
 
         board = eval_boards[i]
