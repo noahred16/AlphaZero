@@ -52,12 +52,7 @@ class Solver:
             for move in moves_values.keys():
                 policy[move] = 1 / len(moves_values)
 
-        # value of state = value of best move, scaled between [0, 1] aka between worst and best
-        value = (best_eval - worst_score) / (best_score - worst_score)
-        # clamping to [-1, 1]
-        value = 2 * value - 1
-
-        return policy, value
+        return policy, best_eval
 
     def max_value(self, depth, alpha, beta):
         """

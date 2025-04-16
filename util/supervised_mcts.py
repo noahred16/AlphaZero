@@ -339,7 +339,7 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
     correct = 0
     total = 0
 
-    model_path = "models/connect4_4x4_supervised_100k.pt"
+    model_path = "models/connect4_4x4_supervised_50k.pt"
     mcts = SupervisedMCTS(model_path=model_path, iterations=mcts_iterations)
     solver_accuracy = Solver(Connect4(num_of_rows=4, num_of_cols=4))
 
@@ -400,7 +400,7 @@ def evaluate_supervised_mcts_on_test_data(
         f"Evaluating SupervisedMCTS on test data with exploration constant: {exploration_constant}, and iterations: {mcts_iterations}"
     )
     # Load the full dataset that was generated earlier.
-    data_path = "data/connect4_4x4_training_data_100k.npy"
+    data_path = "data/connect4_4x4_training_data_50k.npy"
     transformer = DataTransformer(data_path, batch_size=1)
 
     # 2,000 test data samples (20% test from original 10,000 samples)
@@ -415,7 +415,7 @@ def evaluate_supervised_mcts_on_test_data(
     else:
         num_samples = min(num_samples, len(eval_boards))
 
-    model_path = "models/connect4_4x4_supervised_100k.pt"
+    model_path = "models/connect4_4x4_supervised_50k.pt"
 
     correct = 0
     incorrect = 0

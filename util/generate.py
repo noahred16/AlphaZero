@@ -39,7 +39,7 @@ def flip_board(state):
     return np.array([row[::-1] for row in state])
 
 
-num_samples = 100_000
+num_samples = 50_000
 # num_samples = 100
 
 policy, value = solver.evaluate_state()
@@ -105,7 +105,7 @@ for i in range(10):
     print(value)
 
 
-file_name = "data/connect4_4x4_training_data_100k.npy"
+file_name = "data/connect4_4x4_training_data_50k.npy"
 
 # are you sure.
 file_exists = os.path.isfile(file_name)

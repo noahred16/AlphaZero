@@ -4,7 +4,7 @@ import torch
 import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_path = "models/connect4_4x4_supervised_100k.pt"
+model_path = "models/connect4_4x4_supervised_50k.pt"
 
 iterations = 800
 exploration_constant = 1.5

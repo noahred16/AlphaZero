@@ -105,13 +105,28 @@ class Connect4:
             count += self.count_in_direction(row, column, -dr, -dc, -1)
             # print(f"Checking direction ({-dr}, {-dc}): count = {count}")
             if count >= 4:
-                self.result = worst_case_num_moves - self.move_count
+                self.result = self.scale_result()
                 return self.result  # this is key
         # if board is full or has no more moves
         if self.move_count == worst_case_num_moves:
             self.result = 0
             return 0
         return None
+
+    # scale results between [0.1, 1] relative to the fastest win
+    def scale_result(self):
+        n = self.move_count
+        # 7 moves is the fastest win for connect4
+        fastest_move = 7
+        # max moves is cols * rows
+        max_moves = self.num_of_cols * self.num_of_rows
+        # get move value relative to fastest move
+        value = 1 - (n - fastest_move) / (max_moves - fastest_move)
+        # clamp value between [0.1, 1]
+        clamp = 0.1
+        result = (1 - clamp) * value + clamp
+
+        return result
 
     # helper function for evaluate_board
     def count_in_direction(self, row, column, dr, dc, player):

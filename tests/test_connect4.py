@@ -14,7 +14,7 @@ def test_connect4_evaluate_board():
     # ]
     board = np.array(
         [
-            [1, 0, 0, 0],
+            [0, 0, 0, 0],
             [1, -1, 0, 0],
             [1, -1, 0, 0],
             [1, -1, 0, 0],
@@ -22,21 +22,22 @@ def test_connect4_evaluate_board():
         dtype=int,
     )
     game = Connect4(num_of_rows=4, num_of_cols=4, board=board)
+    assert game.move_count == 6
+    game.make_move(0)
     assert game.move_count == 7
 
     board_value = game.evaluate_board()
     print("moves made: ", game.move_count)
 
-    # full board (16) - num of moves (7) = 9
-    assert board_value == 9
+    assert board_value == 1
 
-    opp_win = -board
+    opp_win = -game.board
     print("Opponent's winning board:")
     print(opp_win)
     game = Connect4(num_of_rows=4, num_of_cols=4, board=opp_win)
     board_value = game.evaluate_board(player=-1)
     assert game.move_count == 7
-    assert board_value == 9
+    assert board_value == 1
 
 
 def test_tie_game():
@@ -53,7 +54,7 @@ def test_tie_game():
     game.print_pretty()  # for visual confirmation
     board_value = game.evaluate_board()
     assert game.move_count == 16  # full board
-    assert board_value == 0  # tie game
+    assert board_value == 0.1  # tie game
 
 
 def test_play_game():
@@ -133,6 +134,7 @@ def test_solver_flipping():
     # game.flip_board()  # flip the board to visualize the next player's turn
     assert game.board[3][0] == 1
     assert game.board[3][1] == -1
+
 
 def test_connect4_undo():
     game = Connect4(num_of_rows=4, num_of_cols=4)

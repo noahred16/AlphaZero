@@ -14,7 +14,7 @@ np.random.seed(42)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load the training data (10,000 randomly generated samples with labeled policy and value)
-data_path = "data/connect4_4x4_training_data_100k.npy"
+data_path = "data/connect4_4x4_training_data_50k.npy"
 
 ############################### Prepare Your Dataset ###############################
 data_transformer = DataTransformer(data_path)
@@ -61,7 +61,7 @@ for epoch in range(EPOCHS):
 
 ############################### Save the Trained Model ###############################
 # Save the model
-save_path = "models/connect4_4x4_supervised_100k.pt"
+save_path = "models/connect4_4x4_supervised_50k.pt"
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 torch.save(model.state_dict(), save_path)
 print(f"Model saved to {save_path}")
