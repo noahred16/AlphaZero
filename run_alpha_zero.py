@@ -2,7 +2,11 @@ from util.supervised_mcts import SupervisedMCTS, evaluate_supervised_mcts_on_tes
 from games.connect4 import Connect4
 import torch
 import numpy as np
-from util.data_transformer import DataTransformer, convert_board_to_tensor
+from util.data_transformer import (
+    DataTransformer,
+    convert_board_to_tensor,
+    convert_tensor_to_board,
+)
 import os
 from networks.Connect4Net import Connect4Net
 
@@ -55,7 +59,7 @@ for i, episode in enumerate(boards):
         policy = supervised_mcts.search(game)
 
         # add policy and state to episode states
-        episode_states.append((convert_board_to_tensor(game.board), policy))
+        episode_states.append((game.board.copy(), policy.copy()))
 
         best_move = np.argmax(policy)
 
@@ -67,9 +71,11 @@ for i, episode in enumerate(boards):
     for state in reversed(episode_states):
         board, policy = state
         # add to training data
-        training_data.append((board, policy, winner))
-        batch.append((board, policy, winner))
+        training_data.append((board, policy, value * winner))
+
+        batch.append((board, policy, value * winner))
         winner *= -1
+    break
 
     if len(batch) >= batch_size:
         # train the model
@@ -85,14 +91,16 @@ for i, episode in enumerate(boards):
     # if len(training_data) >= 2000:
     #     break
 
-    # if i > :
+    # if i > 1_000:
     #     break
-    if len(training_data) >= 500:
+    if len(training_data) >= 400:
         break
 
+print(f"Total training data: {len(training_data)}")
+
 # save the training data
-save_array = np.array(training_data, dtype=object)
-np.save("data/connect4_4x4_self_play_data_50k.npy", save_array)
+training_data_array = np.array(training_data, dtype=object)
+np.save("data/connect4_4x4_self_play_data_50k.npy", training_data_array)
 print("Training data saved to data/connect4_4x4_training_data_50k.npy")
 
 # save the model using model_path

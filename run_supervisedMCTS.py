@@ -7,11 +7,13 @@ from networks.Connect4Net import Connect4Net
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model_path = "models/connect4_4x4_alpha_zero_50k.pt"
+# model_path = "models/connect4_4x4_supervised_100k.pt"
 model = Connect4Net().to(device)
-model.load_state_dict(torch.load(model_path, map_location=device))
+# model.load_state_dict(torch.load(model_path, map_location=device))
+model.reset_weights()
 
 
-iterations = 800
+iterations = 400
 # iterations = 20
 exploration_constant = 1.5
 
@@ -84,9 +86,10 @@ cases = [
 
 # evaluate on test data
 accuracy = evaluate_supervised_mcts_on_test_data(
-    num_samples=1_00,
+    num_samples=1_000,
     mcts_iterations=iterations,
     exploration_constant=exploration_constant,
-    # selection_method="PUCT",
-    method="AlphaZero",
+    selection_method="PUCT",
+    # method="AlphaZero",
+    model=model,
 )

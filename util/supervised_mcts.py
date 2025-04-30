@@ -392,10 +392,11 @@ def evaluate_supervised_mcts_accuracy(num_samples=100, mcts_iterations=500):
 
 def evaluate_supervised_mcts_on_test_data(
     exploration_constant,
+    model,
     num_samples=None,
     mcts_iterations=800,
-    selection_method="PUCT",
-    method="AlphaZero",
+    selection_method="UCB-1",
+    method="Standard",
 ):
     """
     Evaluate SupervisedMCTS on the held-out 20% test data from the generated training set.
@@ -425,12 +426,12 @@ def evaluate_supervised_mcts_on_test_data(
     else:
         num_samples = min(num_samples, len(eval_boards))
 
-    model_path = "models/connect4_4x4_supervised_50k.pt"
-    if method == "AlphaZero":
-        model_path = "models/connect4_4x4_alpha_zero_50k.pt"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = Connect4Net().to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    # model_path = "models/connect4_4x4_supervised_50k.pt"
+    # if method == "AlphaZero":
+    #     model_path = "models/connect4_4x4_alpha_zero_50k.pt"
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model = Connect4Net().to(device)
+    # model.load_state_dict(torch.load(model_path, map_location=device))
 
     correct = 0
     incorrect = 0
@@ -450,6 +451,9 @@ def evaluate_supervised_mcts_on_test_data(
         target_policy = eval_target_policy[i]
         target_value = eval_target_value[i]
 
+        # Skip over test cases where all actions are eq
+        # if len(target_policy) == 4 
+
         game = Connect4(num_of_rows=4, num_of_cols=4, board=board)
         # pred_policy, _ = mcts.predict(game)
         pred_policy = mcts.search(clone_game(game))
@@ -462,6 +466,10 @@ def evaluate_supervised_mcts_on_test_data(
         for j in range(len(target_policy)):
             if best_policy_value == target_policy[j]:
                 policy_moves.append(j)
+
+        # Skip over test cases where all actions are equal
+        if len(policy_moves) == len(target_policy):
+            continue
 
         # Consider the prediction correct if the predicted move is any of the best moves
         if pred_move in policy_moves:

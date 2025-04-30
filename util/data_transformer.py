@@ -17,6 +17,11 @@ def convert_tensor_to_board(tensor):
     # tensor.shape: torch.Size([1, 2, 4, 4])
     tensor = tensor.cpu().numpy()
 
+    # print("istensor?", isinstance(tensor, torch.Tensor))
+    # print("debug", tensor)
+    # print("shape", tensor.shape)
+
+
     board = np.zeros((tensor.shape[2], tensor.shape[3]), dtype=np.int8)
 
     board[tensor[0, 0] > 0] = 1  # Player 1 - first channel
@@ -61,11 +66,24 @@ class DataTransformer:
         )
         self.test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
+        # full dataset for evaluation
+        self.full_dataset = dataset
+
     def get_training_data(self):
         return self.train_loader
 
     def get_testing_data(self):
         return self.test_loader
+
+    def get_full_dataset(self):
+        eval_boards = []
+        eval_target_policy = []
+        eval_target_value = []
+        for board, target_policy, target_value in self.full_dataset:
+            eval_boards.append(convert_tensor_to_board(board))
+            eval_target_policy.append(target_policy.cpu().numpy()[0])
+            eval_target_value.append(target_value.cpu().numpy()[0])
+        return eval_boards, eval_target_policy, eval_target_value
 
     def get_evaluation_data(self, type="test"):
         """

@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch
 import torch.optim as optim
+import math
 
 
 class Connect4Net(nn.Module):
@@ -65,3 +66,29 @@ class Connect4Net(nn.Module):
                 total_loss += loss.item()
 
             print(f"Epoch {epoch+1} | Loss: {total_loss:.4f}")
+
+    def reset_weights(self):
+        """
+        Reset the weights of all layers in the model to their default initialization.
+
+        Returns:
+            self: The model with reset weights for method chaining
+        """
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                # Default PyTorch initialization for Conv2d is Kaiming uniform
+                nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+                if module.bias is not None:
+                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                    bound = 1 / math.sqrt(fan_in)
+                    nn.init.uniform_(module.bias, -bound, bound)
+
+            elif isinstance(module, nn.Linear):
+                # Default PyTorch initialization for Linear layers
+                nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+                if module.bias is not None:
+                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                    bound = 1 / math.sqrt(fan_in)
+                    nn.init.uniform_(module.bias, -bound, bound)
+
+        return self  # Return self for method chaining
